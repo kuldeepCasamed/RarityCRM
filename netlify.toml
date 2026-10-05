@@ -1,9 +1,14 @@
 # Netlify config for the CRM FRONTEND (Next.js 16). Repo root = this folder.
-# Deliberately minimal: Netlify auto-detects Next.js and installs its own runtime. Hardcoding `publish` or the
-# plugin made Netlify publish the build as static files, so server routes like /api/auth/login returned 404.
+# The Next.js runtime is declared explicitly (and installed via crm_frontend/package.json) so the server routes
+# (/api/*, login proxy) are always deployed as functions, regardless of dashboard settings or auto-detection.
 # Set CRM_API_URL in Netlify -> Site configuration -> Environment variables (see DEPLOY.md).
 [build]
   base = "crm_frontend"
+  command = "npm run build"
+  publish = ".next"   # relative to base (crm_frontend). Required: the Next.js plugin refuses publish == base.
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

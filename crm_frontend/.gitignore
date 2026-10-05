@@ -42,3 +42,6 @@ next-env.d.ts
 
 # keep the example env file tracked (the rule above ignores every .env*)
 !.env.example
+
+# Netlify CLI local build output
+.netlify
