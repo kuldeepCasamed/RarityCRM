@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { API_URL, COOKIE } from "@/lib/server";
+import { API_URL, backendFetch, COOKIE, wakingResponse } from "@/lib/server";
 
 // Same-origin proxy: browser never sees the token (httpOnly cookie -> Authorization header).
 async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
@@ -14,11 +14,16 @@ async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[]
   if (ct) headers["Content-Type"] = ct;
 
   const hasBody = !["GET", "HEAD"].includes(req.method);
-  const upstream = await fetch(url, {
-    method: req.method,
-    headers,
-    body: hasBody ? await req.arrayBuffer() : undefined,
-  });
+  let upstream: Response;
+  try {
+    upstream = await backendFetch(url, {
+      method: req.method,
+      headers,
+      body: hasBody ? await req.arrayBuffer() : undefined,
+    });
+  } catch {
+    return wakingResponse(); // backend asleep / unreachable: tell the UI to retry rather than failing hard
+  }
 
   const out = new NextResponse(upstream.body, { status: upstream.status });
   // A rejected token must not linger: otherwise /login bounces back to the app and the page reloads forever.

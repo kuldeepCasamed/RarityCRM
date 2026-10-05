@@ -1,10 +1,14 @@
 import axios from "axios";
+import { toast } from "sonner";
 
 export const api = axios.create({ baseURL: "/api/crm" });
 
 api.interceptors.response.use(
   (r) => r,
   (err) => {
+    if (err.response?.status === 503 && err.response?.data?.waking && typeof window !== "undefined") {
+      toast.info("Server is waking up…", { id: "server-waking", duration: 15000, description: "This can take up to a minute after a quiet period. Retrying automatically." });
+    }
     if (err.response?.status === 401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
       // clear the cookie first, otherwise the route guard sends us straight back (redirect loop)
       fetch("/api/auth/logout", { method: "POST" }).finally(() => { window.location.href = "/login"; });

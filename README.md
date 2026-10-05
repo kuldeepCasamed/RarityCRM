@@ -1,5 +1,7 @@
 # Rarity CRM
 
+> **Deploying?** See [DEPLOY.md](DEPLOY.md) (Render backend + Netlify frontend). The sections below are for local development.
+
 `crm_backend/` Django + DRF + Postgres · `crm_frontend/` Next.js 16. No Docker. Plan: `../RARITY_CRM_PLAN.md`.
 
 ## Backend

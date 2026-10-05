@@ -1,0 +1,70 @@
+# Render Blueprint - deploys ONLY the backend (Django API + background worker in one service).
+# The frontend lives on Netlify (see netlify.toml). Repo root = this folder.
+#
+# Secrets marked `sync: false` are never stored in git: Render asks you for them when you create the service.
+services:
+  - type: web
+    name: rarity-crm-backend
+    runtime: python
+    region: ohio              # same region as the Neon database (us-east-2) = fast queries. Change if your DB moves.
+    plan: free                # sleeps after ~15 min idle (cold start ~50s). Change to `starter` to stay always-on.
+    rootDir: crm_backend
+    buildCommand: bash build.sh
+    # No preDeployCommand: it is paid-only. Migrations, schedules and first-admin bootstrap run in build.sh instead.
+    startCommand: bash start.sh
+    healthCheckPath: /healthz/
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL           # your Neon *pooled* connection string
+        sync: false
+      # First login (the free plan has no Shell). Used only while NO admin exists; then delete the PASSWORD variable.
+      - key: CRM_BOOTSTRAP_ADMIN_USERNAME
+        value: admin
+      - key: CRM_BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: CRM_BOOTSTRAP_ADMIN_PASSWORD   # 12+ characters
+        sync: false
+      - key: CRM_INTAKE_API_KEY     # long random string; paste the SAME value into the website's env
+        sync: false
+      - key: CRM_BASE_URL           # the Netlify URL of the CRM frontend, e.g. https://rarity-crm.netlify.app
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: CRM_MANAGER_EMAIL
+        sync: false
+      - key: CLINIC_ADDRESS
+        sync: false
+      - key: CLINIC_PHONE
+        sync: false
+      - key: CLINIC_EMAIL
+        sync: false
+      - key: CLINIC_TAX_ID
+        sync: false
+      # Twilio (leave blank until calling is set up)
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_API_KEY
+        sync: false
+      - key: TWILIO_API_SECRET
+        sync: false
+      - key: TWILIO_TWIML_APP_SID
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      # Tuning (safe defaults for the 512 MB starter instance)
+      - key: DB_CONN_MAX_AGE
+        value: "60"
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: Q_WORKERS
+        value: "1"
+      - key: Q_POLL
+        value: "5"

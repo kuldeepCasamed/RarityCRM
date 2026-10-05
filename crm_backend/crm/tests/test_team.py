@@ -89,3 +89,40 @@ class TeamTests(APITestCase):
         b = c.post("/api/crm/branches/", {"name": "Gurugram"}, format="json").json()["id"]
         self.assertEqual(c.post("/api/crm/doctors/", {"name": "Dr X", "branch": b}, format="json").status_code, 201)
         self.assertEqual(self.as_(self.rep).get("/api/crm/doctors/").status_code, 200)
+
+
+class BootstrapAdminTests(APITestCase):
+    def run_cmd(self, **env):
+        import os
+        from io import StringIO
+        from django.core.management import call_command
+        out, err = StringIO(), StringIO()
+        keys = ["CRM_BOOTSTRAP_ADMIN_USERNAME", "CRM_BOOTSTRAP_ADMIN_PASSWORD", "CRM_BOOTSTRAP_ADMIN_EMAIL"]
+        old = {k: os.environ.pop(k, None) for k in keys}
+        os.environ.update(env)
+        try:
+            call_command("bootstrap_admin", stdout=out, stderr=err)
+        finally:
+            for k in keys:
+                os.environ.pop(k, None)
+                if old[k] is not None:
+                    os.environ[k] = old[k]
+        return out.getvalue() + err.getvalue()
+
+    def test_not_configured_is_a_noop(self):
+        self.assertIn("skipping", self.run_cmd())
+        self.assertEqual(CRMUser.objects.count(), 0)
+
+    def test_weak_password_refused(self):
+        self.run_cmd(CRM_BOOTSTRAP_ADMIN_USERNAME="boss", CRM_BOOTSTRAP_ADMIN_PASSWORD="short")
+        self.assertEqual(User.objects.count(), 0)
+
+    def test_creates_first_admin_who_can_log_in_then_never_again(self):
+        self.run_cmd(CRM_BOOTSTRAP_ADMIN_USERNAME="boss", CRM_BOOTSTRAP_ADMIN_PASSWORD="a-long-password-1", CRM_BOOTSTRAP_ADMIN_EMAIL="b@x.com")
+        r = APIClient().post("/api/crm/auth/login/", {"username": "boss", "password": "a-long-password-1"}, format="json")
+        self.assertEqual((r.status_code, r.json()["user"]["role"]), (200, "admin"))
+        # a later deploy with different values must not reset the password or add users
+        self.run_cmd(CRM_BOOTSTRAP_ADMIN_USERNAME="boss", CRM_BOOTSTRAP_ADMIN_PASSWORD="different-password-2")
+        self.run_cmd(CRM_BOOTSTRAP_ADMIN_USERNAME="intruder", CRM_BOOTSTRAP_ADMIN_PASSWORD="another-long-password-3")
+        self.assertEqual(list(User.objects.values_list("username", flat=True)), ["boss"])
+        self.assertTrue(User.objects.get(username="boss").check_password("a-long-password-1"))

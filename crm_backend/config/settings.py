@@ -1,15 +1,31 @@
+import os
+import sys
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(DEBUG=(bool, False))
 environ.Env.read_env(BASE_DIR / ".env")
 
-SECRET_KEY = env("SECRET_KEY", default="dev-insecure-change-me")
-DEBUG = env("DEBUG")
+DEV_SECRET_KEY = "dev-insecure-change-me"
+SECRET_KEY = env("SECRET_KEY", default=DEV_SECRET_KEY)
+DEBUG = env("DEBUG")  # False unless DEBUG=True is set (local .env sets it; production must not)
+TESTING = "test" in sys.argv
+
+# Refuse to boot in production with the well-known development key.
+if not DEBUG and not TESTING and (SECRET_KEY == DEV_SECRET_KEY or len(SECRET_KEY) < 32):
+    raise ImproperlyConfigured("Set SECRET_KEY to a long random value (32+ chars) when DEBUG is off.")
+
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+# Render injects the service's public hostname; trust it automatically.
+_render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if _render_host:
+    ALLOWED_HOSTS.append(_render_host)
+    CSRF_TRUSTED_ORIGINS.append(f"https://{_render_host}")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -29,6 +45,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # serves /static/ (admin css) without nginx
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -65,6 +82,11 @@ DATABASES = {
 # Poolers (Neon/pgbouncer, transaction mode) can't hold server-side cursors.
 DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
+# Seconds to keep a DB connection open between requests (0 = reconnect each request). Set ~60 in production.
+DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=0)
+if DATABASES["default"]["ENGINE"].endswith("postgresql"):
+    # psycopg3 prepared statements don't survive transaction-mode poolers.
+    DATABASES["default"].setdefault("OPTIONS", {})["prepare_threshold"] = None
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -79,6 +101,13 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage" if (DEBUG or TESTING)
+        else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
@@ -102,21 +131,25 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS", default=["http://localhost:3000"]
 )
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # django-q2 uses the ORM (Postgres/sqlite) as broker: no Redis needed.
+# Note: the worker polls the database, which keeps a serverless Postgres (e.g. Neon) awake while it runs.
 Q_CLUSTER = {
     "name": "rarity_crm",
-    "workers": 2,
+    "workers": env.int("Q_WORKERS", default=2),
     "timeout": 60,
     "retry": 90,
+    "max_attempts": 3,
+    "poll": env.float("Q_POLL", default=1.0),  # seconds between DB polls; higher = fewer queries
+    "catch_up": False,  # after downtime, don't replay every missed daily digest at once
     "orm": "default",
     "sync": env.bool("Q_SYNC", default=False),
 }
 
 # --- CRM settings ---
 CRM_BASE_URL = env("CRM_BASE_URL", default="http://localhost:3000")
-PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", default="http://localhost:8000")
+# On Render this defaults to the service URL; set explicitly only for a custom domain.
+PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", default=os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8000"))
 # Shared secret the marketing site sends as X-Rarity-Key (server-side only).
 CRM_INTAKE_API_KEY = env("CRM_INTAKE_API_KEY", default="")
 CRM_MANAGER_EMAIL = env("CRM_MANAGER_EMAIL", default="")
@@ -152,3 +185,26 @@ QUOTE_DEFAULT_TERMS = env(
     default="This estimate is based on a preliminary assessment. The final treatment plan and fees may change after "
             "clinical examination, imaging or if additional treatment becomes necessary. Prices are valid until the date shown.",
 )
+
+# --- Production hardening (only when DEBUG is off, so local development is unchanged) ---
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")  # Render terminates TLS in front of us
+    SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
+    SECURE_REDIRECT_EXEMPT = [r"^healthz/$"]  # the platform health check talks plain HTTP
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=3600)  # raise to 31536000 once confirmed working
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
+    # We deliberately don't preload HSTS or cover subdomains (the domain also hosts other things).
+    SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"]
+
+# Errors and request logs go to stdout so the host (Render) captures them.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
+    "root": {"handlers": ["console"], "level": env("LOG_LEVEL", default="INFO")},
+    "loggers": {"django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False}},
+}
