@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 
-export const API_URL = process.env.CRM_API_URL ?? "http://localhost:8000/api/crm";
+/** Accepts the common ways CRM_API_URL gets typed and returns the exact API base ".../api/crm" (no trailing slash):
+ *  "https://host", "https://host/", "https://host/api", "https://host/api/crm/", " https://host/api/crm " all work. */
+export function normalizeApiUrl(raw?: string): string {
+  const base = (raw ?? "").trim() || "http://localhost:8000/api/crm";
+  const noSlash = base.replace(/\/+$/, "");
+  if (/\/api\/crm$/.test(noSlash)) return noSlash;
+  return noSlash.replace(/\/api$/, "") + "/api/crm";
+}
+export const API_URL = normalizeApiUrl(process.env.CRM_API_URL);
 // Distinct name: cookies on "localhost" are shared across ports, so a generic name can collide with other local apps.
 export const COOKIE = "rarity_crm_token";
 
