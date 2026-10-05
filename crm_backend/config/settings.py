@@ -79,6 +79,12 @@ DATABASES = {
     "default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
 }
 
+if not DATABASES["default"].get("ENGINE"):
+    raise ImproperlyConfigured(
+        "DATABASE_URL is not a valid database URL. Expected postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require "
+        "(check the DATABASE_URL environment variable for a leftover placeholder or stray spaces/quotes)."
+    )
+
 # Poolers (Neon/pgbouncer, transaction mode) can't hold server-side cursors.
 DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
