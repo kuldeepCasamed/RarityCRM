@@ -72,6 +72,8 @@ class CRMUser(models.Model):
     is_active = models.BooleanField(default=True)
     daily_lead_limit = models.PositiveIntegerField(default=0, help_text="0 = unlimited")
     receives_auto_assign = models.BooleanField(default=True)
+    email_from = models.EmailField(blank=True, help_text="Address emails to leads are sent from (must be on a domain verified in Resend, else the default sender is used)")
+    email_signature = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -212,6 +214,9 @@ class Lead(models.Model):
     consent_recording = models.BooleanField(default=False)
     whatsapp_opt_out = models.BooleanField(default=False)
     sms_opt_out = models.BooleanField(default=False)
+    email_opt_out = models.BooleanField(default=False, help_text="Unsubscribed / complained: no automated or campaign email")
+    email_invalid = models.BooleanField(default=False, help_text="Address hard-bounced: do not email")
+    unsubscribed_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -466,3 +471,198 @@ class QuoteItem(models.Model):
 
     class Meta:
         ordering = ["position", "id"]
+
+
+# ---------------------------------------------------------------- email (two-way inbox)
+def _thread_token():
+    return secrets.token_hex(8)  # 16 hex chars; used in the reply-to address t-<token>@<reply domain>
+
+
+class EmailThread(models.Model):
+    """One conversation with a lead. lead=None means an inbound email we could not match (shown in the Unmatched inbox)."""
+
+    lead = models.ForeignKey(Lead, null=True, blank=True, on_delete=models.CASCADE, related_name="email_threads")
+    subject = models.CharField(max_length=300, blank=True)
+    token = models.CharField(max_length=16, unique=True, default=_thread_token)
+    needs_reply = models.BooleanField(default=False, db_index=True)
+    last_message_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-last_message_at"]
+
+
+class EmailMessage(models.Model):
+    class Direction(models.TextChoices):
+        OUT = "out", "Sent"
+        IN = "in", "Received"
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        SENT = "sent", "Sent"
+        DELAYED = "delayed", "Delayed"
+        DELIVERED = "delivered", "Delivered"
+        BOUNCED = "bounced", "Bounced"
+        COMPLAINED = "complained", "Marked as spam"
+        FAILED = "failed", "Failed"
+        RECEIVED = "received", "Received"
+
+    thread = models.ForeignKey(EmailThread, on_delete=models.CASCADE, related_name="messages")
+    direction = models.CharField(max_length=3, choices=Direction.choices)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.QUEUED)
+    from_address = models.CharField(max_length=320, blank=True)
+    to_address = models.CharField(max_length=320, blank=True)
+    subject = models.CharField(max_length=300, blank=True)
+    body_text = models.TextField(blank=True, help_text="What is shown: for inbound mail the reply without the quoted history")
+    body_full = models.TextField(blank=True, help_text="Inbound only: full plain text including quoted history")
+    body_html = models.TextField(blank=True, help_text="Outbound only: the HTML that was sent. Inbound HTML is never stored or rendered.")
+    rfc_message_id = models.CharField(max_length=300, blank=True, db_index=True)
+    in_reply_to = models.CharField(max_length=300, blank=True)
+    resend_id = models.CharField(max_length=64, blank=True)
+    error = models.CharField(max_length=500, blank=True)
+    sent_by = models.ForeignKey(CRMUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    enrollment = models.ForeignKey("SequenceEnrollment", null=True, blank=True, on_delete=models.SET_NULL, related_name="messages")
+    campaign = models.ForeignKey("EmailCampaign", null=True, blank=True, on_delete=models.SET_NULL, related_name="messages")
+    step = models.ForeignKey("EmailSequenceStep", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    attachments = models.JSONField(default=list, blank=True, help_text="Inbound attachment metadata (name, type); files are not downloaded")
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    opened_at = models.DateTimeField(null=True, blank=True)
+    clicked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["resend_id"], condition=~models.Q(resend_id=""), name="uniq_email_resend_id"),
+            # a sequence step can only ever be sent once per enrolment, even if two workers race
+            models.UniqueConstraint(fields=["enrollment", "step"], condition=models.Q(enrollment__isnull=False, step__isnull=False),
+                                    name="uniq_email_enrollment_step"),
+        ]
+
+
+class EmailTemplate(models.Model):
+    """Reusable subject/body with merge fields such as {{first_name}} (see crm/emailing.py MERGE_FIELDS)."""
+
+    name = models.CharField(max_length=120, unique=True)
+    subject = models.CharField(max_length=300)
+    body = models.TextField()
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(CRMUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+
+class WebhookEvent(models.Model):
+    """Processed provider webhook ids, so a retried delivery is never applied twice."""
+
+    event_id = models.CharField(max_length=120, unique=True)
+    event_type = models.CharField(max_length=60, blank=True)
+    received_at = models.DateTimeField(auto_now_add=True)
+
+
+# ---------------------------------------------------------------- automated email sequences
+class EmailSequence(models.Model):
+    """A timed series of emails (e.g. Welcome: now, +2 days, +5 days). Stops by itself when the lead replies, books, etc."""
+
+    name = models.CharField(max_length=120, unique=True)
+    description = models.CharField(max_length=300, blank=True)
+    is_active = models.BooleanField(default=True, help_text="Inactive sequences send nothing and enrol nobody")
+    auto_enroll = models.BooleanField(default=False, help_text="Enrol new leads automatically")
+    auto_enroll_sources = models.JSONField(default=list, blank=True, help_text="LeadSource values that trigger auto-enrolment")
+    run_while_status = models.JSONField(default=list, blank=True, help_text="Keeps running only while the lead is in one of these statuses")
+    from_user = models.ForeignKey(CRMUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                  help_text="Sender when the lead has no assigned rep (blank = the default address)")
+    created_by = models.ForeignKey(CRMUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+
+class EmailSequenceStep(models.Model):
+    sequence = models.ForeignKey(EmailSequence, on_delete=models.CASCADE, related_name="steps")
+    position = models.PositiveSmallIntegerField()
+    delay_hours = models.PositiveIntegerField(default=0, help_text="Wait this long after the previous step (or after enrolment for step 1)")
+    template = models.ForeignKey(EmailTemplate, on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [models.UniqueConstraint(fields=["sequence", "position"], name="uniq_sequence_step_position")]
+
+
+class SequenceEnrollment(models.Model):
+    class State(models.TextChoices):
+        ACTIVE = "active", "Active"
+        COMPLETED = "completed", "Completed"
+        STOPPED = "stopped", "Stopped"
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="enrollments")
+    sequence = models.ForeignKey(EmailSequence, on_delete=models.CASCADE, related_name="enrollments")
+    state = models.CharField(max_length=10, choices=State.choices, default=State.ACTIVE, db_index=True)
+    stop_reason = models.CharField(max_length=30, blank=True)
+    current_step = models.PositiveSmallIntegerField(default=0, help_text="Index of the NEXT step to send")
+    next_send_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    thread = models.ForeignKey(EmailThread, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    enrolled_by = models.ForeignKey(CRMUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-enrolled_at"]
+        constraints = [
+            # one live enrolment per lead per sequence (a finished one can be followed by a fresh enrolment)
+            models.UniqueConstraint(fields=["lead", "sequence"], condition=models.Q(state="active"), name="uniq_active_enrollment"),
+        ]
+
+
+# ---------------------------------------------------------------- one-off campaigns (broadcasts)
+class EmailCampaign(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SCHEDULED = "scheduled", "Scheduled"
+        SENDING = "sending", "Sending"
+        PAUSED = "paused", "Paused"
+        SENT = "sent", "Sent"
+        CANCELLED = "cancelled", "Cancelled"
+
+    name = models.CharField(max_length=150)
+    subject = models.CharField(max_length=300)
+    body = models.TextField(help_text="Plain text with merge fields; a copy of the template taken when the campaign is created")
+    template = models.ForeignKey(EmailTemplate, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    audience_filters = models.JSONField(default=dict, blank=True, help_text="Same filters as the Leads page")
+    skip_recent_days = models.PositiveSmallIntegerField(default=3, help_text="Skip leads who got an automated/campaign email in the last N days (0 = off)")
+    skip_open_conversations = models.BooleanField(default=True, help_text="Skip leads who replied and are waiting for a person")
+    from_user = models.ForeignKey(CRMUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="+", help_text="Sender (default: whoever created it)")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT, db_index=True)
+    scheduled_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(CRMUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class CampaignRecipient(models.Model):
+    class State(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SENT = "sent", "Sent"
+        SKIPPED = "skipped", "Skipped"
+        FAILED = "failed", "Failed"
+
+    campaign = models.ForeignKey(EmailCampaign, on_delete=models.CASCADE, related_name="recipients")
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="campaign_recipients")
+    state = models.CharField(max_length=8, choices=State.choices, default=State.PENDING, db_index=True)
+    skip_reason = models.CharField(max_length=40, blank=True)
+    message = models.ForeignKey(EmailMessage, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    attempts = models.PositiveSmallIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["campaign", "lead"], name="uniq_campaign_recipient")]

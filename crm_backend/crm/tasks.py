@@ -22,6 +22,9 @@ def _lead_link(lead_id):
 def notify_new_lead(lead_id): _enqueue("run_new_lead_alert", lead_id)
 def notify_assigned(lead_id): _enqueue("run_assigned_alert", lead_id)
 def send_invite_email(invite_id): _enqueue("run_invite_email", invite_id)
+def notify_email_reply(lead_id, message_id): _enqueue("run_email_reply_alert", lead_id, message_id)
+def kick_sequences(): _enqueue("run_sequence_tick")
+def kick_campaigns(): _enqueue("run_campaign_tick")
 def sync_appointment(appt_id): _enqueue("run_calendar_sync", appt_id)
 def delete_calendar_event(calendar_id, event_id): _enqueue("run_calendar_delete", calendar_id, event_id)
 
@@ -159,3 +162,29 @@ def run_expire_quotes():
     from .quotes import expire_overdue
 
     return f"quotes expired: {expire_overdue()}"
+
+
+def run_email_reply_alert(lead_id, message_id):
+    """Tell the assigned rep (or the managers if unassigned) that a lead replied by email."""
+    from .models import EmailMessage, Lead
+
+    lead = Lead.objects.select_related("assigned_to__user").get(pk=lead_id)
+    msg = EmailMessage.objects.get(pk=message_id)
+    to = [lead.assigned_to.user.email] if lead.assigned_to and lead.assigned_to.user.email else manager_emails()
+    preview = (msg.body_text or "")[:400]
+    html = render(f"{lead.name} replied by email", [("Subject", msg.subject), ("Message", preview)], _lead_link(lead.id) + "?tab=Emails", "Open the conversation")
+    return send_email(sorted(set(to)), f"Reply from {lead.name}: {msg.subject}"[:200], html)
+
+
+def run_sequence_tick():
+    """Every few minutes: send the email sequence steps that are due (daily cap + office-hours rules apply)."""
+    from .emailing import run_sequence_tick as tick
+
+    return f"sequences: {tick()}"
+
+
+def run_campaign_tick():
+    """Every few minutes: send due campaign emails (shared daily cap, office hours)."""
+    from .campaigns import run_campaign_tick as tick
+
+    return f"campaigns: {tick()}"

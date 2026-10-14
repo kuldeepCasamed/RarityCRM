@@ -11,7 +11,9 @@ from rest_framework.views import APIView
 
 from .. import services
 from ..filters import filter_leads
-from ..models import Lead, LeadSource
+from django.db.models import Exists, OuterRef
+
+from ..models import EmailThread, Lead, LeadSource
 from ..permissions import IsCRMManager, IsCRMUser, crm_profile
 from ..serializers import (
     LeadDetailSerializer, LeadListSerializer, LeadPipelineSerializer, StatusHistorySerializer,
@@ -35,6 +37,7 @@ class LeadViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Lead.objects.alive().select_related("assigned_to__user")
         if self.action == "list":
+            qs = qs.annotate(needs_reply=Exists(EmailThread.objects.filter(lead=OuterRef("pk"), needs_reply=True)))
             return filter_leads(self.request, qs)
         return qs
 

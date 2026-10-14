@@ -6,6 +6,11 @@ set -o errexit
 
 PORT="${PORT:-8000}"
 
+# Hosts without a separate build step (Cloud Run source deploys) have no static files yet; Render's build.sh already made them.
+if [ ! -d staticfiles ]; then
+  python manage.py collectstatic --noinput
+fi
+
 pids=()
 cleanup() { kill "${pids[@]}" 2>/dev/null || true; wait 2>/dev/null || true; }
 trap cleanup SIGTERM SIGINT

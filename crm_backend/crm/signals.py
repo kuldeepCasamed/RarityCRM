@@ -10,6 +10,14 @@ def _lead_saved(sender, instance, **kwargs):
     rescore(instance)  # uses queryset.update(), so this cannot recurse
 
 
+@receiver(post_save, sender=Appointment)
+def _booked(sender, instance, created, **kwargs):
+    if created:  # an appointment means a human is now in the loop: automated nudges stop
+        from .emailing import stop_sequences
+
+        stop_sequences(instance.lead, "booked")
+
+
 @receiver([post_save, post_delete], sender=ContactLog)
 @receiver([post_save, post_delete], sender=Appointment)
 def _child_changed(sender, instance, **kwargs):

@@ -82,6 +82,37 @@ instance-hours (about 750/month - check Render's current terms), and then none o
 Trade-off: the always-on worker polls Neon, which keeps Neon's compute awake too; on Neon's free plan check the monthly compute-hour limit,
 or raise `Q_POLL`. Without the monitor, jobs only run when someone happens to wake the service.
 
+## Two-way email (replies appear in the CRM)
+Needs a one-time setup in Resend and your DNS. Everything below can be checked in the CRM: **Settings -> Email -> Setup status**.
+1. **Resend -> Domains:** make sure `raritydental.com` is verified for sending (already true if alerts/quotes are delivered).
+2. **Resend -> Receiving:** add a **subdomain** such as `reply.raritydental.com` for receiving and create the **MX record** Resend shows.
+   **Use a subdomain only. An MX record on the main domain would redirect all of the clinic's normal staff email to Resend.**
+3. **Resend -> Webhooks -> Add endpoint:** URL `https://<backend>/api/crm/email/webhook/` (shown in Settings -> Email),
+   events: `email.delivered`, `email.bounced`, `email.complained`, `email.failed`, `email.delivery_delayed`, `email.opened`, `email.clicked`, `email.received`.
+   Copy the **signing secret** (`whsec_...`).
+4. **Backend environment** (Render now, GCP later): `EMAIL_REPLY_DOMAIN=reply.raritydental.com`, `RESEND_WEBHOOK_SECRET=whsec_...`,
+   optionally `EMAIL_VERIFIED_DOMAINS` (comma-separated) and `EMAIL_DEFAULT_FROM`. Redeploy.
+5. **Per person:** Settings -> Email -> your sender address + signature. An address on a domain that is *not* verified in Resend falls back
+   to the default address with your name; replies still return to the CRM either way.
+Moving the backend (e.g. to GCP): update the Resend webhook URL and Twilio TwiML URL to the new address. Nothing else is host-specific.
+While the backend sleeps (free plan), an inbound reply is only processed once Resend's webhook retry reaches an awake server - keep it awake for this feature.
+
+## Automated email sequences (Phase 2)
+- Build: nothing new to configure. `build.sh` runs `setup_schedules`, which now also registers **"Email sequences"** (runs every 5 minutes).
+  Sequences send **only while the background worker is running**, so keep the backend awake (paid Render / GCP VM / keep-alive monitor).
+- Optional tuning (environment): `EMAIL_DAILY_CAP` (default **100** automated emails/day: raise gradually as your sender reputation and Resend plan allow),
+  `EMAIL_SEND_START_HOUR` / `EMAIL_SEND_END_HOUR` (default 8 and 21, clinic time zone): follow-ups wait for this window; the first email goes out immediately.
+- Every automated email has an unsubscribe link (`/api/crm/email/unsubscribe/<token>/`, public) and one-click `List-Unsubscribe` headers; it uses
+  `PUBLIC_BASE_URL`, so on GCP/custom domains set that to the backend's real public https address *before* sending.
+- Add `CLINIC_ADDRESS` so the footer carries your postal address (commonly required for marketing email).
+
+## Email campaigns (Phase 3)
+- Managers only (Sidebar -> Campaigns). Registered by `setup_schedules` as **"Email campaigns"** (every 5 minutes), so it also needs the always-on worker.
+- Campaigns share `EMAIL_DAILY_CAP` with sequences, but may use at most `EMAIL_CAMPAIGN_SHARE` of it (default **0.7**), so a big campaign can never block welcome emails.
+  Other limits: `EMAIL_CAMPAIGN_MAX_RECIPIENTS` (default 2000 per campaign) and `EMAIL_SEND_PAUSE` (default 0.6 s between sends, to stay under Resend's request rate limit).
+  A 500-person campaign therefore takes 3-5 days at the default cap of 100/day: raise `EMAIL_DAILY_CAP` as your Resend plan and sender reputation allow.
+- Campaign emails are sent from the manager who created the campaign (their sender identity), in office hours only (`EMAIL_SEND_START_HOUR`..`EMAIL_SEND_END_HOUR`).
+
 ## Other limits and notes
 - **CSV import via Netlify:** Netlify cuts functions at ~10 s, so import in batches of about 200 rows or fewer (leads and ad spend).
 - **Memory:** web + worker measured ~190 MB of the free plan's 512 MB (light load). Heavy PDF/CSV work spikes it; if the instance restarts

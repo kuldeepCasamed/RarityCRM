@@ -30,7 +30,7 @@ export type Lead = {
   status: string; source: string; priority: string; assigned_to: number | null;
   assigned_to_name: string | null; tags: string[]; treatment_interests: string[];
   is_international: boolean; last_contacted_at: string | null; next_followup_at: string | null;
-  created_at: string; updated_at?: string; score?: number; score_band?: "hot" | "warm" | "cold"; score_breakdown?: { label: string; points: number }[]; chief_complaint?: string; budget_band?: string; insurance?: string;
+  created_at: string; updated_at?: string; needs_reply?: boolean; email_opt_out?: boolean; email_invalid?: boolean; score?: number; score_band?: "hot" | "warm" | "cold"; score_breakdown?: { label: string; points: number }[]; chief_complaint?: string; budget_band?: string; insurance?: string;
   urgency?: string; landing_url?: string;
 };
 export type Paged<T> = { count: number; results: T[] };
@@ -41,11 +41,12 @@ export const TREATMENTS = [
   ["whitening", "Whitening"], ["full_mouth", "Full Mouth Rehab"], ["pediatric", "Pediatric"], ["other", "Other"],
 ] as const;
 
+const flat = (v: any): string => (Array.isArray(v) ? v.map(flat).join(" ") : v && typeof v === "object" ? Object.values(v).map(flat).join(" ") : String(v));
 export const errMsg = (e: any): string => {
   const d = e?.response?.data;
   if (!d) return "Something went wrong";
   if (typeof d === "string") return d;
-  return d.detail ?? Object.entries(d).map(([k, v]) => `${k}: ${[v].flat().join(" ")}`).join(" · ");
+  return d.detail ?? Object.entries(d).map(([k, v]) => `${k}: ${flat(v)}`).join(" · ");
 };
 
 // Fallback when a lead has no explicit timezone (IANA names).

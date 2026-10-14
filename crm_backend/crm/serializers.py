@@ -2,6 +2,9 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from .models import (
+    EmailCampaign,
+    EmailSequence, EmailSequenceStep, SequenceEnrollment,
+    EmailMessage, EmailTemplate, EmailThread,
     Quote, QuoteItem, TreatmentCatalog,
     MarketingSpend,
     CallSession,
@@ -19,7 +22,7 @@ class CRMUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CRMUser
         fields = ["id", "name", "email", "role", "phone", "timezone", "is_active",
-                  "daily_lead_limit", "receives_auto_assign"]
+                  "daily_lead_limit", "receives_auto_assign", "email_from", "email_signature"]
         read_only_fields = ["id", "name", "email"]
 
     def get_name(self, obj):
@@ -41,6 +44,7 @@ class DoctorSerializer(serializers.ModelSerializer):
 class LeadListSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.SerializerMethodField()
     score_band = serializers.SerializerMethodField()
+    needs_reply = serializers.BooleanField(read_only=True, default=False)  # annotated by the list view
 
     def get_score_band(self, obj):
         from .scoring import band
@@ -51,7 +55,7 @@ class LeadListSerializer(serializers.ModelSerializer):
         model = Lead
         fields = ["id", "name", "email", "phone", "country", "status", "source", "priority",
                   "assigned_to", "assigned_to_name", "tags", "treatment_interests",
-                  "is_international", "last_contacted_at", "next_followup_at", "created_at", "score", "score_band"]
+                  "is_international", "last_contacted_at", "next_followup_at", "created_at", "score", "score_band", "needs_reply", "email_opt_out", "email_invalid"]
 
     def get_assigned_to_name(self, obj):
         return obj.assigned_to.user.get_full_name() if obj.assigned_to else None
@@ -63,12 +67,16 @@ class LeadDetailSerializer(serializers.ModelSerializer):
 
     assigned_to_name = serializers.SerializerMethodField()
     score_band = serializers.SerializerMethodField()
+    needs_reply = serializers.SerializerMethodField()
+
+    def get_needs_reply(self, obj):
+        return obj.email_threads.filter(needs_reply=True).exists() if obj.pk else False
 
     class Meta:
         model = Lead
         exclude = ["deleted_at"]
         read_only_fields = ["status", "assigned_to", "converted_at", "created_at", "updated_at",
-                            "score", "score_breakdown", "scored_at"]
+                            "score", "score_breakdown", "scored_at", "email_opt_out", "email_invalid", "unsubscribed_at"]
 
     def get_score_band(self, obj):
         from .scoring import band
@@ -315,4 +323,204 @@ class QuoteSerializer(serializers.ModelSerializer):
             t = calculate([(i["quantity"], i["unit_price"]) for i in items], dtype, dval, 0)
             if dtype == "amount" and dval > t.subtotal:
                 raise serializers.ValidationError({"discount_value": "Discount is larger than the subtotal."})
+        return attrs
+
+
+class EmailMessageSerializer(serializers.ModelSerializer):
+    sent_by_name = serializers.SerializerMethodField()
+    attachments = serializers.JSONField(read_only=True)
+
+    class Meta:
+        model = EmailMessage
+        fields = ["id", "thread", "direction", "status", "from_address", "to_address", "subject", "body_text", "body_full",
+                  "error", "sent_by_name", "attachments", "delivered_at", "opened_at", "clicked_at", "created_at"]
+
+    def get_sent_by_name(self, obj):
+        return obj.sent_by.user.get_full_name() if obj.sent_by else None
+
+
+class EmailThreadSerializer(serializers.ModelSerializer):
+    messages = EmailMessageSerializer(many=True, read_only=True)
+    lead_name = serializers.CharField(source="lead.name", read_only=True, default=None)
+
+    class Meta:
+        model = EmailThread
+        fields = ["id", "lead", "lead_name", "subject", "needs_reply", "last_message_at", "created_at", "messages"]
+
+
+class EmailThreadRowSerializer(serializers.ModelSerializer):
+    """Inbox list row: last message preview only."""
+
+    lead_name = serializers.CharField(source="lead.name", read_only=True, default=None)
+    assigned_to_name = serializers.SerializerMethodField()
+    preview = serializers.SerializerMethodField()
+    from_address = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EmailThread
+        fields = ["id", "lead", "lead_name", "assigned_to_name", "subject", "needs_reply", "last_message_at", "preview", "from_address"]
+
+    def _last(self, obj):
+        msgs = list(obj.messages.all())
+        return msgs[-1] if msgs else None
+
+    def get_preview(self, obj):
+        m = self._last(obj)
+        return (m.body_text or "")[:200] if m else ""
+
+    def get_from_address(self, obj):
+        m = self._last(obj)
+        return m.from_address if m else ""
+
+    def get_assigned_to_name(self, obj):
+        a = obj.lead.assigned_to if obj.lead_id else None
+        return a.user.get_full_name() if a else None
+
+
+class EmailTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmailTemplate
+        fields = ["id", "name", "subject", "body", "is_active", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
+class SequenceStepSerializer(serializers.ModelSerializer):
+    template_name = serializers.CharField(source="template.name", read_only=True)
+
+    class Meta:
+        model = EmailSequenceStep
+        fields = ["id", "position", "delay_hours", "template", "template_name"]
+        read_only_fields = ["id", "position"]  # position is the order of the list you send
+
+    def validate_delay_hours(self, v):
+        if v > 24 * 180:
+            raise serializers.ValidationError("Wait at most 180 days between steps.")
+        return v
+
+    def validate_template(self, t):
+        if not t.is_active:
+            raise serializers.ValidationError(f"Template '{t.name}' is inactive.")
+        return t
+
+
+class SequenceSerializer(serializers.ModelSerializer):
+    steps = SequenceStepSerializer(many=True, allow_empty=False)
+    stats = serializers.SerializerMethodField()
+    from_user_name = serializers.CharField(source="from_user.user.get_full_name", read_only=True, default=None)
+
+    class Meta:
+        model = EmailSequence
+        fields = ["id", "name", "description", "is_active", "auto_enroll", "auto_enroll_sources", "run_while_status",
+                  "from_user", "from_user_name", "steps", "stats", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def get_stats(self, obj):
+        e = SequenceEnrollment.objects.filter(sequence=obj)
+        return {
+            "active": e.filter(state="active").count(), "completed": e.filter(state="completed").count(),
+            "stopped": e.filter(state="stopped").count(), "replied": e.filter(stop_reason="replied").count(),
+            "booked": e.filter(stop_reason="booked").count(), "unsubscribed": e.filter(stop_reason="unsubscribed").count(),
+            "emails_sent": EmailMessage.objects.filter(enrollment__sequence=obj).exclude(status="failed").count(),
+        }
+
+    def validate_auto_enroll_sources(self, v):
+        valid = {c for c, _ in LeadSource.choices}
+        bad = [x for x in v if x not in valid]
+        if bad:
+            raise serializers.ValidationError(f"Unknown sources: {bad}")
+        return v
+
+    def validate_run_while_status(self, v):
+        from .models import LeadStatus
+
+        valid = {c for c, _ in LeadStatus.choices}
+        bad = [x for x in v if x not in valid]
+        if bad:
+            raise serializers.ValidationError(f"Unknown statuses: {bad}")
+        return v
+
+    def validate(self, attrs):
+        if attrs.get("auto_enroll", getattr(self.instance, "auto_enroll", False)) and not attrs.get(
+                "auto_enroll_sources", getattr(self.instance, "auto_enroll_sources", [])):
+            raise serializers.ValidationError({"auto_enroll_sources": "Choose at least one lead source to auto-enrol."})
+        return attrs
+
+    def _save_steps(self, seq, steps):
+        seq.steps.all().delete()
+        EmailSequenceStep.objects.bulk_create(
+            [EmailSequenceStep(sequence=seq, position=i, delay_hours=s["delay_hours"], template=s["template"]) for i, s in enumerate(steps)])
+
+    def create(self, data):
+        from django.db import transaction
+
+        steps = data.pop("steps")
+        if not data.get("run_while_status"):
+            data["run_while_status"] = ["new", "contacted"]
+        with transaction.atomic():
+            seq = EmailSequence.objects.create(**data)
+            self._save_steps(seq, steps)
+        return seq
+
+    def update(self, seq, data):
+        from django.db import transaction
+
+        steps = data.pop("steps", None)
+        with transaction.atomic():
+            for k, v in data.items():
+                setattr(seq, k, v)
+            if not seq.run_while_status:
+                seq.run_while_status = ["new", "contacted"]
+            seq.save()
+            if steps is not None:
+                self._save_steps(seq, steps)
+        return seq
+
+
+class EnrollmentSerializer(serializers.ModelSerializer):
+    lead_name = serializers.CharField(source="lead.name", read_only=True)
+    sequence_name = serializers.CharField(source="sequence.name", read_only=True)
+    total_steps = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SequenceEnrollment
+        fields = ["id", "lead", "lead_name", "sequence", "sequence_name", "state", "stop_reason", "current_step", "total_steps",
+                  "next_send_at", "last_sent_at", "enrolled_at", "finished_at"]
+
+    def get_total_steps(self, obj):
+        return obj.sequence.steps.count()
+
+
+class CampaignSerializer(serializers.ModelSerializer):
+    template_name = serializers.CharField(source="template.name", read_only=True, default=None)
+    from_user_name = serializers.CharField(source="from_user.user.get_full_name", read_only=True, default=None)
+    created_by_name = serializers.CharField(source="created_by.user.get_full_name", read_only=True, default=None)
+    counts = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EmailCampaign
+        fields = ["id", "name", "subject", "body", "template", "template_name", "audience_filters", "skip_recent_days",
+                  "skip_open_conversations", "from_user", "from_user_name", "status", "scheduled_at", "started_at", "finished_at",
+                  "created_by_name", "created_at", "counts"]
+        read_only_fields = ["id", "status", "scheduled_at", "started_at", "finished_at", "created_at"]
+
+    def get_counts(self, obj):
+        r = obj.recipients.all()
+        return {"recipients": r.count(), "sent": r.filter(state="sent").count(), "pending": r.filter(state="pending").count()}
+
+    def validate_audience_filters(self, v):
+        from .campaigns import clean_filters
+
+        try:
+            return clean_filters(v)
+        except ValueError as e:
+            raise serializers.ValidationError(str(e))
+
+    def validate_skip_recent_days(self, v):
+        if v > 90:
+            raise serializers.ValidationError("At most 90 days.")
+        return v
+
+    def validate(self, attrs):
+        if self.instance and self.instance.status != "draft":
+            raise serializers.ValidationError("Only a draft campaign can be edited.")
         return attrs

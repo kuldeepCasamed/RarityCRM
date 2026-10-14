@@ -94,6 +94,14 @@ def create_lead(*, auto_assign=True, changed_by=None, **fields) -> tuple[Lead, b
         if rep:
             lead.assigned_to = rep
             lead.save(update_fields=["assigned_to", "updated_at"])
+    try:  # never let an email problem stop a lead from being created
+        from .emailing import auto_enroll
+
+        auto_enroll(lead)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("auto-enrolment failed for lead %s", lead.pk)
     return lead, True
 
 
@@ -113,6 +121,9 @@ def change_status(lead: Lead, new_status: str, by: CRMUser | None = None) -> Lea
             fields.append("converted_value")
     lead.save(update_fields=fields)
     StatusHistory.objects.create(lead=lead, from_status=old, to_status=new_status, changed_by=by)
+    from .emailing import stop_sequences_for_status
+
+    stop_sequences_for_status(lead)  # email sequences only run while the lead is in their allowed statuses
     return lead
 
 

@@ -39,7 +39,7 @@ class MeView(APIView):
 
     def patch(self, request):
         profile = crm_profile(request)
-        ser = CRMUserSerializer(profile, data={k: v for k, v in request.data.items() if k in ("phone", "timezone")}, partial=True)
+        ser = CRMUserSerializer(profile, data={k: v for k, v in request.data.items() if k in ("phone", "timezone", "email_from", "email_signature")}, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
         return Response(ser.data)

@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import activity, analytics, calls, public, quotes, roi, team
+from .views import activity, analytics, calls, emails, public, quotes, roi, team
 from .views.leads import LeadViewSet
 
 router = DefaultRouter()
@@ -9,6 +9,9 @@ router.register("leads", LeadViewSet, basename="lead")
 router.register("users", team.CRMUserViewSet, basename="crmuser")
 router.register("marketing-spend", roi.MarketingSpendViewSet, basename="spend")
 router.register("treatment-catalog", quotes.CatalogViewSet, basename="catalog")
+router.register("email-templates", emails.TemplateViewSet, basename="emailtemplate")
+router.register("sequences", emails.SequenceViewSet, basename="sequence")
+router.register("campaigns", emails.CampaignViewSet, basename="campaign")
 router.register("branches", team.BranchViewSet, basename="branch")
 router.register("doctors", team.DoctorViewSet, basename="doctor")
 router.register("notifications/recipients", team.RecipientViewSet, basename="recipient")
@@ -38,6 +41,19 @@ urlpatterns = [
     path("quotes/<int:pk>/duplicate/", quotes.QuoteDuplicateView.as_view()),
     path("quotes/<int:pk>/pdf/", quotes.QuotePDFView.as_view()),
     path("quotes/<int:pk>/email/", quotes.QuoteEmailView.as_view()),
+    path("leads/<int:lead_id>/emails/", emails.LeadEmails.as_view()),
+    path("leads/<int:lead_id>/emails/preview/", emails.EmailPreview.as_view()),
+    path("campaigns/audience/", emails.CampaignAudience.as_view()),
+    path("leads/<int:lead_id>/enrollments/", emails.LeadEnrollments.as_view()),
+    path("leads/<int:lead_id>/enroll/", emails.LeadEnrollments.as_view()),
+    path("enrollments/<int:pk>/stop/", emails.EnrollmentStop.as_view()),
+    path("email/unsubscribe/<str:token>/", emails.unsubscribe),
+    path("inbox/", emails.Inbox.as_view()),
+    path("inbox/count/", emails.InboxCount.as_view()),
+    path("email-threads/<int:pk>/resolve/", emails.ThreadResolve.as_view()),
+    path("email-threads/<int:pk>/assign/", emails.ThreadAssign.as_view()),
+    path("email/status/", emails.EmailStatus.as_view()),
+    path("email/webhook/", emails.webhook),
     path("calls/", calls.CallListView.as_view()),
     path("calls/token/", calls.CallTokenView.as_view()),
     path("calls/initiate/", calls.CallInitiateView.as_view()),

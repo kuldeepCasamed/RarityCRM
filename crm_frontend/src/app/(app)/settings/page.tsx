@@ -16,7 +16,7 @@ const errMsg = (e: any) => {
 export default function SettingsPage() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: async () => (await api.get<Me>("/me/")).data });
   const isManager = me?.role === "admin" || me?.role === "manager";
-  const tabs = ["Profile", ...(isManager ? ["Team", "Notifications", "Clinic", "Price list"] : [])];
+  const tabs = ["Profile", "Email", ...(isManager ? ["Team", "Notifications", "Clinic", "Price list"] : [])];
   const [tab, setTab] = useState("Profile");
   if (!me) return <p className="text-stone-500">Loading…</p>;
 
@@ -29,6 +29,7 @@ export default function SettingsPage() {
         ))}
       </div>
       {tab === "Profile" && <Profile me={me} />}
+      {tab === "Email" && <EmailSettings isManager={isManager} />}
       {tab === "Team" && isManager && <Team me={me} />}
       {tab === "Notifications" && isManager && <Notifications />}
       {tab === "Clinic" && isManager && <Clinic />}
@@ -269,6 +270,87 @@ function PriceList() {
         ))}
         {data?.length === 0 && <p className="p-4 text-sm text-stone-400">No treatments yet.</p>}
       </div>
+    </div>
+  );
+}
+
+
+function EmailSettings({ isManager }: { isManager: boolean }) {
+  const qc = useQueryClient();
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: async () => (await api.get("/me/")).data });
+  const { data: st } = useQuery({ queryKey: ["email-status"], queryFn: async () => (await api.get<any>("/email/status/")).data });
+  const { data: templates } = useQuery({ queryKey: ["email-templates"], queryFn: async () => (await api.get<any[]>("/email-templates/")).data });
+  const saveMe = useMutation({
+    mutationFn: (b: object) => api.patch("/me/", b),
+    onSuccess: () => { toast.success("Saved"); qc.invalidateQueries({ queryKey: ["me"] }); qc.invalidateQueries({ queryKey: ["email-status"] }); },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+  const inv = () => qc.invalidateQueries({ queryKey: ["email-templates"] });
+  const addT = useMutation({ mutationFn: (b: object) => api.post("/email-templates/", b), onSuccess: () => { toast.success("Template added"); inv(); }, onError: (e) => toast.error(errMsg(e)) });
+  const patchT = useMutation({ mutationFn: ({ id, ...b }: any) => api.patch(`/email-templates/${id}/`, b), onSuccess: () => { toast.success("Saved"); inv(); }, onError: (e) => toast.error(errMsg(e)) });
+  const delT = useMutation({ mutationFn: (id: number) => api.delete(`/email-templates/${id}/`), onSuccess: inv });
+  const [editing, setEditing] = useState<any | null>(null);
+  if (!me || !st) return <p className="text-stone-500">Loading…</p>;
+  const tick = (ok: boolean) => (ok ? <span className="text-green-700">✓</span> : <span className="text-red-600">✗</span>);
+
+  return (
+    <div className="space-y-6">
+      <form className="bg-white border rounded-lg p-4 space-y-3 max-w-xl" onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); saveMe.mutate({ email_from: f.get("email_from"), email_signature: f.get("email_signature") }); }}>
+        <h2 className="font-medium">Your sender identity</h2>
+        <label className="text-sm block">Send emails from (address)
+          <input name="email_from" type="email" defaultValue={me.email_from} placeholder={me.email} className={input + " mt-1"} /></label>
+        <p className="text-xs text-stone-500">Emails to leads will go out as <b>{st.my_sender}</b>.
+          {st.my_sender_is_fallback && <span className="text-amber-600"> Your own address ({st.my_wanted_address}) isn't on a domain verified for sending ({st.verified_domains.join(", ")}), so the default address is used with your name. Replies still reach the CRM.</span>}</p>
+        <label className="text-sm block">Signature (added under every email you send)
+          <textarea name="email_signature" defaultValue={me.email_signature} rows={4} className={input + " mt-1"} placeholder={"Kind regards,\nYour name\nRarity Dental"} /></label>
+        <button className="bg-brand text-white rounded-md px-4 py-2 text-sm">Save</button>
+      </form>
+
+      {isManager && (
+        <section className="bg-white border rounded-lg p-4 space-y-2 max-w-xl text-sm">
+          <h2 className="font-medium">Setup status</h2>
+          <div>{tick(st.resend_key)} Email sending key (<code>RESEND_API_KEY</code>)</div>
+          <div>{tick(!!st.reply_domain)} Reply address domain {st.reply_domain ? <code>{st.reply_domain}</code> : <span className="text-stone-500">— set <code>EMAIL_REPLY_DOMAIN</code> (e.g. reply.raritydental.com) so replies come back into the CRM</span>}</div>
+          <div>{tick(st.webhook_secret)} Webhook signing secret (<code>RESEND_WEBHOOK_SECRET</code>)</div>
+          <div className="text-xs text-stone-500 space-y-1 pt-1">
+            <div>Webhook URL to add in Resend (events: delivered, bounced, complained, opened, clicked, <b>received</b>): <code className="select-all break-all">{st.webhook_url}</code></div>
+            <div>Reply domain needs an <b>MX record on that subdomain only</b> (never the main domain) pointing to Resend's receiving servers.</div>
+            <div>Domains that can send from a person's own address: {st.verified_domains.join(", ")}. Default sender: {st.default_from}.</div>
+          </div>
+        </section>
+      )}
+
+      <section className="space-y-3 max-w-3xl">
+        <h2 className="font-medium">Email templates</h2>
+        <p className="text-xs text-stone-500">Merge fields: {Object.keys(st.merge_fields).map((k) => `{{${k}}}`).join("  ")}</p>
+        {isManager && (
+          <form key={editing?.id ?? "new"} className="bg-white border rounded-lg p-3 space-y-2" onSubmit={(e) => {
+            e.preventDefault(); const f = new FormData(e.currentTarget);
+            const body = { name: f.get("name"), subject: f.get("subject"), body: f.get("body") };
+            if (editing) { patchT.mutate({ id: editing.id, ...body }); setEditing(null); } else { addT.mutate(body); e.currentTarget.reset(); }
+          }}>
+            <div className="text-sm font-medium">{editing ? `Editing "${editing.name}"` : "New template"}</div>
+            <input name="name" required defaultValue={editing?.name} placeholder="Name (e.g. Welcome)" className={input} />
+            <input name="subject" required defaultValue={editing?.subject} placeholder="Subject (e.g. Thanks for your enquiry, {{first_name}})" className={input} />
+            <textarea name="body" required defaultValue={editing?.body} rows={6} placeholder={"Hi {{first_name}},\n\nThank you for contacting {{clinic_name}}…"} className={input} />
+            <div className="flex gap-2"><button className="bg-brand text-white rounded-md px-4 py-1.5 text-sm">{editing ? "Save changes" : "Add template"}</button>
+              {editing && <button type="button" onClick={() => setEditing(null)} className="text-sm text-stone-500">Cancel</button>}</div>
+          </form>
+        )}
+        <div className="bg-white border rounded-lg divide-y">
+          {templates?.map((t) => (
+            <div key={t.id} className="p-3 text-sm flex items-start gap-3">
+              <div className="flex-1 min-w-0"><div className={t.is_active ? "font-medium" : "font-medium line-through text-stone-400"}>{t.name}</div><div className="text-xs text-stone-500 truncate">{t.subject}</div></div>
+              {isManager && <>
+                <label className="text-xs flex items-center gap-1"><input type="checkbox" checked={t.is_active} onChange={() => patchT.mutate({ id: t.id, is_active: !t.is_active })} /> active</label>
+                <button onClick={() => setEditing(t)} className="text-xs text-brand">Edit</button>
+                <button onClick={() => confirm(`Delete template "${t.name}"?`) && delT.mutate(t.id)} className="text-xs text-red-600">Delete</button>
+              </>}
+            </div>
+          ))}
+          {templates?.length === 0 && <p className="p-4 text-sm text-stone-400">No templates yet.</p>}
+        </div>
+      </section>
     </div>
   );
 }

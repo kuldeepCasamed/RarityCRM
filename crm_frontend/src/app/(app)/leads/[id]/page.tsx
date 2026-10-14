@@ -1,20 +1,25 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { toast } from "sonner";
 import ScoreBadge from "@/components/ScoreBadge";
+import EmailsTab from "@/components/EmailsTab";
 import QuotesTab from "@/components/QuotesTab";
 import CallPanel from "@/components/CallPanel";
 import LeadProfileForm from "@/components/LeadProfileForm";
 import { api, dualTime, errMsg, Lead, leadTimezone, STATUSES } from "@/lib/api";
 
-const TABS = ["Overview", "Profile", "Contacts", "Notes", "Tasks", "Appointments", "Quotes", "Calls", "History"] as const;
+const TABS = ["Overview", "Profile", "Contacts", "Notes", "Tasks", "Appointments", "Emails", "Quotes", "Calls", "History"] as const;
 
 export default function LeadDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const qc = useQueryClient();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t && (TABS as readonly string[]).includes(t)) setTab(t as (typeof TABS)[number]);
+  }, []);
   const key = ["lead", id];
   const { data: lead } = useQuery({ queryKey: key, queryFn: async () => (await api.get<Lead>(`/leads/${id}/`)).data });
 
@@ -33,7 +38,7 @@ export default function LeadDetail({ params }: { params: Promise<{ id: string }>
     <div className="space-y-4 max-w-4xl">
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-3">{lead.name} <ScoreBadge score={lead.score} band={lead.score_band} /></h1>
+          <h1 className="text-2xl font-semibold flex items-center gap-3">{lead.name} <ScoreBadge score={lead.score} band={lead.score_band} />{lead.needs_reply && <button onClick={() => setTab("Emails")} className="text-xs bg-red-100 text-red-700 rounded px-2 py-0.5 font-medium">↩ Needs reply</button>}</h1>
           <p className="text-sm text-stone-500">{lead.phone} · {lead.email} · {lead.country}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -56,6 +61,7 @@ export default function LeadDetail({ params }: { params: Promise<{ id: string }>
       {tab === "Notes" && <Notes id={id} />}
       {tab === "Tasks" && <Tasks id={id} />}
       {tab === "Appointments" && <Appointments id={id} />}
+      {tab === "Emails" && <EmailsTab leadId={lead.id} leadName={lead.name} />}
       {tab === "Quotes" && <QuotesTab leadId={lead.id} leadEmail={lead.email} leadName={lead.name} />}
       {tab === "Calls" && <LeadCalls id={id} />}
       {tab === "History" && <History id={id} />}

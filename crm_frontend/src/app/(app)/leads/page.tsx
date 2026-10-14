@@ -59,6 +59,9 @@ function LeadsInner() {
         <select value={params.assigned_to ?? ""} onChange={(e) => setParam("assigned_to", e.target.value)} className="border rounded-md px-2 py-1.5 text-sm bg-white">
           <option value="">Anyone</option><option value="me">Assigned to me</option><option value="unassigned">Unassigned</option>
         </select>
+        <select value={params.needs_reply ?? ""} onChange={(e) => setParam("needs_reply", e.target.value)} className="border rounded-md px-2 py-1.5 text-sm bg-white">
+          <option value="">Any email state</option><option value="true">↩ Needs reply</option>
+        </select>
         <select value={params.band ?? ""} onChange={(e) => setParam("band", e.target.value)} className="border rounded-md px-2 py-1.5 text-sm bg-white">
           <option value="">Any score</option><option value="hot">🔥 Hot (60+)</option><option value="warm">Warm (30–59)</option><option value="cold">Cold (&lt;30)</option>
         </select>
@@ -80,6 +83,8 @@ function LeadsInner() {
             {data?.results.map((l) => (
               <tr key={l.id} className="border-t hover:bg-stone-50">
                 <td className="p-3"><Link href={`/leads/${l.id}`} className="font-medium text-brand">{l.name}</Link>
+                  {l.needs_reply && <span className="ml-2 text-xs bg-red-100 text-red-700 rounded px-1.5" title="This lead replied by email">↩ Needs reply</span>}
+                  {l.email_invalid && <span className="ml-2 text-xs bg-stone-200 text-stone-600 rounded px-1.5" title="Email bounced">bad email</span>}
                   {l.is_international && <span className="ml-2 text-xs bg-sky-100 text-sky-700 rounded px-1.5">{l.country || "Intl"}</span>}</td>
                 <td><ScoreBadge score={l.score} band={l.score_band} /></td>
                 <td>{l.phone}</td><td>{statusLabel(l.status)}</td><td>{l.source}</td>

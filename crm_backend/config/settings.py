@@ -26,6 +26,10 @@ _render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
 if _render_host:
     ALLOWED_HOSTS.append(_render_host)
     CSRF_TRUSTED_ORIGINS.append(f"https://{_render_host}")
+# Cloud Run sets K_SERVICE; trust its *.run.app address (a custom domain goes in ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS).
+if os.environ.get("K_SERVICE"):
+    ALLOWED_HOSTS.append(".run.app")
+    CSRF_TRUSTED_ORIGINS.append("https://*.run.app")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -214,3 +218,25 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": env("LOG_LEVEL", default="INFO")},
     "loggers": {"django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False}},
 }
+
+# --- Email: two-way inbox (Resend) ---
+# Replies come back to  t-<token>@EMAIL_REPLY_DOMAIN  (an MX record on that SUBDOMAIN points to Resend; never the root domain).
+EMAIL_REPLY_DOMAIN = env("EMAIL_REPLY_DOMAIN", default="")
+# Domains verified in Resend. A user's own address is only used as the sender when it is on one of these.
+EMAIL_VERIFIED_DOMAINS = [d.strip().lower() for d in env.list("EMAIL_VERIFIED_DOMAINS", default=["raritydental.com"]) if d.strip()]
+# Fallback sender address (display name = the person sending). Defaults to the address in CRM_FROM_EMAIL.
+EMAIL_DEFAULT_FROM = env("EMAIL_DEFAULT_FROM", default="")
+# Signing secret of the Resend webhook (starts with whsec_). Without it the webhook endpoint rejects everything.
+RESEND_WEBHOOK_SECRET = env("RESEND_WEBHOOK_SECRET", default="")
+
+# --- Automated email sequences ---
+# Max automated emails per day (protects sender reputation while warming up, and your Resend plan limit). 0 = no automated sending.
+EMAIL_DAILY_CAP = env.int("EMAIL_DAILY_CAP", default=100)
+# Follow-up steps (not the first email) are only sent inside this local-time window (TIME_ZONE), hours 0-24.
+EMAIL_SEND_START_HOUR = env.int("EMAIL_SEND_START_HOUR", default=8)
+EMAIL_SEND_END_HOUR = env.int("EMAIL_SEND_END_HOUR", default=21)
+# Campaigns may use at most this share of EMAIL_DAILY_CAP, so a big campaign can never block welcome/follow-up emails.
+EMAIL_CAMPAIGN_SHARE = env.float("EMAIL_CAMPAIGN_SHARE", default=0.7)
+EMAIL_CAMPAIGN_MAX_RECIPIENTS = env.int("EMAIL_CAMPAIGN_MAX_RECIPIENTS", default=2000)
+# Seconds to pause between campaign sends (Resend rate-limits requests per second).
+EMAIL_SEND_PAUSE = env.float("EMAIL_SEND_PAUSE", default=0.6)
