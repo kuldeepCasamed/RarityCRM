@@ -108,6 +108,20 @@ class TeamInvite(models.Model):
         return not self.is_used and self.expires_at > timezone.now()
 
 
+class PasswordResetCode(models.Model):
+    """One-time code emailed to a user who forgot their password. Only a keyed hash of the code is stored."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="password_reset_codes")
+    code_hash = models.CharField(max_length=64)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "-created_at"])]
+
+
 class Branch(models.Model):
     name = models.CharField(max_length=120, unique=True)
     address = models.TextField(blank=True)

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ export default function LoginPage() {
         <button disabled={busy} className="w-full bg-brand text-white rounded-md py-2 disabled:opacity-60">
           {busy ? "Signing in…" : "Sign in"}
         </button>
+        <Link href="/forgot-password" className="block text-center text-sm text-brand">Forgot password?</Link>
       </form>
     </div>
   );

@@ -134,6 +134,9 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "public_intake": "20/hour",
         "login": "10/minute",
+        # Shared by everyone behind the frontend proxy, so keep these loose; the real limits are per account (see password_reset.py).
+        "password_reset_request": "60/hour",
+        "password_reset_confirm": "120/hour",
         "calls": "30/hour",
     },
 }

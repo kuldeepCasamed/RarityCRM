@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import activity, analytics, calls, emails, public, quotes, roi, team
+from .views import activity, analytics, calls, emails, password_reset, public, quotes, roi, team
 from .views.leads import LeadViewSet
 
 router = DefaultRouter()
@@ -18,6 +18,8 @@ router.register("notifications/recipients", team.RecipientViewSet, basename="rec
 
 urlpatterns = [
     path("auth/login/", team.LoginView.as_view()),
+    path("auth/password-reset/request/", password_reset.PasswordResetRequestView.as_view()),
+    path("auth/password-reset/confirm/", password_reset.PasswordResetConfirmView.as_view()),
     path("me/", team.MeView.as_view()),
     path("interest/", public.InterestView.as_view()),
     path("me/password/", team.ChangePasswordView.as_view()),
