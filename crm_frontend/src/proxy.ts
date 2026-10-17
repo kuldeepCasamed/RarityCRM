@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { COOKIE } from "@/lib/server";
 
-const PUBLIC = ["/login", "/invite", "/forgot-password", "/offline"];
+const PUBLIC = ["/login", "/invite", "/forgot-password", "/offline", "/install"];
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
