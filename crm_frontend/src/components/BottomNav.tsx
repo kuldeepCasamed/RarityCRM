@@ -3,6 +3,7 @@ import { CheckSquare, Inbox, LayoutDashboard, LogOut, Menu, Users, X } from "luc
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import InstallApp from "@/components/InstallApp";
 import { useNav } from "@/components/Sidebar";
 
 // Phone navigation (below md): four main tabs + a "More" sheet with everything else. Desktop keeps the Sidebar.
@@ -35,6 +36,7 @@ export default function BottomNav() {
                 </Link>
               ))}
             </nav>
+            <InstallApp className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg bg-brand text-white py-3 text-sm" />
             <button onClick={logout} className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg border py-3 text-sm text-stone-600">
               <LogOut size={16} /> Sign out
             </button>

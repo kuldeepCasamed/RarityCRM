@@ -4,6 +4,7 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { useEffect } from "react";
 import { Toaster } from "sonner";
 import ServiceWorker from "@/components/ServiceWorker";
+import "@/lib/install"; // starts listening for the browser's install prompt as early as possible
 import { flushWrites, getQueryClient, PERSIST_MAX_AGE, persister, refreshPending, shouldPersistQuery } from "@/lib/offline";
 
 export default function Providers({ children }: { children: React.ReactNode }) {

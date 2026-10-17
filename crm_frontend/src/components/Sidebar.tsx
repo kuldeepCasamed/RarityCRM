@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import InstallApp from "@/components/InstallApp";
 import { api } from "@/lib/api";
 import { clearOfflineData, usePendingWrites } from "@/lib/offline";
 import { disablePush } from "@/lib/push";
@@ -44,6 +45,7 @@ export default function Sidebar() {
             <Icon size={16} /> {label}{href === "/inbox" && inboxBadge > 0 && <span className="ml-auto rounded-full bg-red-500 text-white text-xs px-1.5">{inboxBadge}</span>}
           </Link>
         ))}
+        <InstallApp className="w-full flex items-center gap-2 rounded-md px-3 py-2 text-sm text-brand hover:bg-stone-100" />
       </nav>
       <button onClick={logout} className="m-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm text-stone-600 hover:bg-stone-100">
         <LogOut size={16} /> Sign out
