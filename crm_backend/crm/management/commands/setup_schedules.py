@@ -9,8 +9,9 @@ JOBS = [
     ("crm.tasks.run_expire_quotes", "Expire overdue quotes", Schedule.DAILY),
     ("crm.tasks.run_sequence_tick", "Email sequences", Schedule.MINUTES),
     ("crm.tasks.run_campaign_tick", "Email campaigns", Schedule.MINUTES),
+    ("crm.tasks.run_push_reminders", "Push reminders", Schedule.MINUTES),
 ]
-MINUTES = {"Email sequences": 5, "Email campaigns": 5}
+MINUTES = {"Email sequences": 5, "Email campaigns": 5, "Push reminders": 5}
 
 
 class Command(BaseCommand):

@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import activity, analytics, calls, emails, password_reset, public, quotes, roi, team
+from .views import activity, analytics, calls, emails, password_reset, public, push, quotes, roi, team
 from .views.leads import LeadViewSet
 
 router = DefaultRouter()
@@ -27,6 +27,9 @@ urlpatterns = [
     path("team/invites/", team.InviteListView.as_view()),
     path("team/invites/<int:pk>/", team.InviteDetailView.as_view()),
     path("notifications/test/", team.NotificationTestView.as_view()),
+    path("push/config/", push.PushConfigView.as_view()),
+    path("push/subscribe/", push.PushSubscribeView.as_view()),
+    path("push/test/", push.PushTestView.as_view()),
     path("team/accept-invite/<str:token>/", team.AcceptInviteView.as_view()),
     path("leads/<int:lead_id>/contacts/", activity.ContactList.as_view()),
     path("leads/<int:lead_id>/notes/", activity.NoteList.as_view()),

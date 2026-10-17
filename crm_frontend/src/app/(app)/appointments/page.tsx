@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { addDays, format, startOfDay } from "date-fns";
 import Link from "next/link";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, isQueued } from "@/lib/api";
 
 const STATUS = ["booked", "confirmed", "attended", "no_show", "cancelled"];
 
@@ -12,11 +12,16 @@ export default function AppointmentsPage() {
   const [day, setDay] = useState(startOfDay(new Date()));
   const from = day.toISOString(), to = addDays(day, 7).toISOString();
   const { data } = useQuery({ queryKey: ["appts", from], queryFn: async () => (await api.get<any[]>("/appointments/", { params: { from, to } })).data });
-  const setStatus = useMutation({ mutationFn: ({ id, status }: { id: number; status: string }) => api.patch(`/appointments/${id}/`, { status }), onSuccess: () => qc.invalidateQueries({ queryKey: ["appts"] }) });
+  const setStatus = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => api.patch(`/appointments/${id}/`, { status }, { offline: "Appointment status" }),
+    onSuccess: (r, { id, status }) => isQueued(r)
+      ? qc.setQueryData<any[]>(["appts", from], (old = []) => old.map((a) => (a.id === id ? { ...a, status } : a)))
+      : qc.invalidateQueries({ queryKey: ["appts"] }),
+  });
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">Appointments</h1>
         <div className="flex gap-2 text-sm">
           <button onClick={() => setDay(addDays(day, -7))} className="border rounded px-2 py-1 bg-white">‹ Prev week</button>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { COOKIE } from "@/lib/server";
 
-const PUBLIC = ["/login", "/invite", "/forgot-password"];
+const PUBLIC = ["/login", "/invite", "/forgot-password", "/offline"];
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -15,4 +15,4 @@ export function proxy(req: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"] };
+export const config = { matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|icons/|apple-icon).*)"] };

@@ -1,23 +1,34 @@
 "use client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { useEffect } from "react";
 import { Toaster } from "sonner";
+import ServiceWorker from "@/components/ServiceWorker";
+import { flushWrites, getQueryClient, PERSIST_MAX_AGE, persister, refreshPending, shouldPersistQuery } from "@/lib/offline";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  const [qc] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 15_000,
-        // while the backend wakes from sleep it answers 503: keep retrying (~1 min) instead of showing errors
-        retry: (count, err: any) => err?.response?.status === 503 && count < 8,
-        retryDelay: 7000,
-      },
-    },
-  }));
   return (
-    <QueryClientProvider client={qc}>
+    <PersistQueryClientProvider
+      client={getQueryClient()}
+      persistOptions={{ persister, maxAge: PERSIST_MAX_AGE, buster: "v1", dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery } }}
+    >
       {children}
       <Toaster richColors position="top-right" />
-    </QueryClientProvider>
+      <ServiceWorker />
+      <OfflineSync />
+    </PersistQueryClientProvider>
   );
+}
+
+// Replays writes queued while offline: on load and whenever the connection comes back.
+function OfflineSync() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const flush = () => flushWrites(qc);
+    refreshPending().then(flush);
+    window.addEventListener("online", flush);
+    const retry = setInterval(flush, 30_000); // e.g. backend was still waking up on the last attempt
+    return () => { window.removeEventListener("online", flush); clearInterval(retry); };
+  }, [qc]);
+  return null;
 }

@@ -10,5 +10,12 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# Service worker must never be cached by the CDN/browser, or users get stuck on an old version.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"

@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 from django_q.tasks import async_task
 
+from .push import managers, safe_push
 from .utils.email_service import manager_emails, render, send_email
 
 
@@ -34,6 +35,8 @@ def run_new_lead_alert(lead_id):
     from .models import Lead
 
     lead = Lead.objects.select_related("assigned_to__user").get(pk=lead_id)
+    safe_push([*managers(), lead.assigned_to], f"New lead: {lead.name}",
+              " · ".join(x for x in (lead.get_source_display(), lead.country, lead.chief_complaint) if x), f"/leads/{lead.id}", f"lead-{lead.id}")
     to = manager_emails()
     if lead.assigned_to and lead.assigned_to.user.email:
         to.append(lead.assigned_to.user.email)
@@ -50,6 +53,8 @@ def run_assigned_alert(lead_id):
     from .models import Lead
 
     lead = Lead.objects.select_related("assigned_to__user").get(pk=lead_id)
+    if lead.assigned_to:
+        safe_push([lead.assigned_to], "Lead assigned to you", f"{lead.name} · {lead.phone}", f"/leads/{lead.id}", f"lead-{lead.id}")
     if not lead.assigned_to or not lead.assigned_to.user.email:
         return "skipped: no assignee email"
     html = render("Lead assigned to you", [("Name", lead.name), ("Phone", lead.phone)], _lead_link(lead.id))
@@ -112,6 +117,30 @@ def run_appointment_reminders(hours=24):
     return f"reminders sent: {sent}"
 
 
+def run_push_reminders(task_minutes=10, appt_minutes=60):
+    """Every few minutes: one push per task coming due and per appointment starting soon (to the rep who owns it)."""
+    from .models import Appointment, Task
+    from .push import is_configured
+
+    if not is_configured():
+        return "skipped: VAPID keys not set"
+    now = timezone.now()
+    tasks = Task.objects.filter(is_done=False, push_reminded_at__isnull=True, assigned_to__isnull=False,
+                                due_at__lte=now + timedelta(minutes=task_minutes), due_at__gte=now - timedelta(hours=1)).select_related("lead", "assigned_to")
+    for t in tasks:
+        safe_push([t.assigned_to], f"Task due: {t.title}", f"{t.lead.name} · {timezone.localtime(t.due_at):%H:%M}", f"/leads/{t.lead_id}?tab=Tasks", f"task-{t.id}")
+    n_tasks = Task.objects.filter(pk__in=[t.pk for t in tasks]).update(push_reminded_at=now)
+
+    appts = Appointment.objects.filter(status__in=["booked", "confirmed"], push_reminded_at__isnull=True,
+                                       start_at__gte=now, start_at__lte=now + timedelta(minutes=appt_minutes)).select_related("lead__assigned_to", "doctor")
+    for a in appts:
+        doctor = f" with {a.doctor.name}" if a.doctor else ""
+        safe_push([a.lead.assigned_to] if a.lead.assigned_to else managers(), f"Appointment at {timezone.localtime(a.start_at):%H:%M}",
+                  f"{a.lead.name} · {a.get_kind_display()}{doctor}", f"/leads/{a.lead_id}?tab=Appointments", f"appt-{a.id}")
+    n_appts = Appointment.objects.filter(pk__in=[a.pk for a in appts]).update(push_reminded_at=now)
+    return f"push reminders: {n_tasks} tasks, {n_appts} appointments"
+
+
 def run_calendar_sync(appt_id):
     """Push an appointment to Google Calendar. Cancelled appointments remove their event."""
     from .models import Appointment
@@ -170,6 +199,8 @@ def run_email_reply_alert(lead_id, message_id):
 
     lead = Lead.objects.select_related("assigned_to__user").get(pk=lead_id)
     msg = EmailMessage.objects.get(pk=message_id)
+    safe_push([lead.assigned_to] if lead.assigned_to else managers(), f"{lead.name} replied", msg.subject or (msg.body_text or "")[:120],
+              f"/leads/{lead.id}?tab=Emails", f"reply-{lead.id}")
     to = [lead.assigned_to.user.email] if lead.assigned_to and lead.assigned_to.user.email else manager_emails()
     preview = (msg.body_text or "")[:400]
     html = render(f"{lead.name} replied by email", [("Subject", msg.subject), ("Message", preview)], _lead_link(lead.id) + "?tab=Emails", "Open the conversation")

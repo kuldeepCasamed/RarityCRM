@@ -113,6 +113,19 @@ While the backend sleeps (free plan), an inbound reply is only processed once Re
   A 500-person campaign therefore takes 3-5 days at the default cap of 100/day: raise `EMAIL_DAILY_CAP` as your Resend plan and sender reputation allow.
 - Campaign emails are sent from the manager who created the campaign (their sender identity), in office hours only (`EMAIL_SEND_START_HOUR`..`EMAIL_SEND_END_HOUR`).
 
+## PWA + push notifications
+- Backend now runs on **Cloud Run** (`rarity-crm-backend`, asia-south1): `cd crm_backend && gcloud run deploy rarity-crm-backend --source . --region asia-south1`.
+  On Cloud Run `start.sh` runs `migrate` + `setup_schedules` at startup (a failed migration leaves the previous revision serving).
+- The frontend is an installable PWA (manifest, `public/sw.js`, offline page, offline write queue). Nothing to configure on Netlify.
+- Push needs a VAPID key pair on the **backend only**. Generate once: `cd crm_backend && .venv/bin/python manage.py generate_vapid_keys`,
+  then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (secret) and `VAPID_SUBJECT=mailto:<contact email>` on the backend service.
+  Keep the keys stable: changing them invalidates every device, and users have to turn notifications on again.
+- Notifications go out for new leads (managers + assignee), lead assignment, email replies, and, via `setup_schedules`' **"Push reminders"** job
+  (every 5 minutes, needs the worker), tasks coming due and appointments starting within the hour. Emails are unchanged.
+- Users turn it on from the in-app banner or Settings → Profile → "Notifications on this device". iPhone/iPad: only after Add to Home Screen.
+- Without the keys everything else works; push is simply skipped.
+- After changing `public/sw.js`, bump `VERSION` in it if the cached pages/assets should be dropped.
+
 ## Other limits and notes
 - **CSV import via Netlify:** Netlify cuts functions at ~10 s, so import in batches of about 200 rows or fewer (leads and ad spend).
 - **Memory:** web + worker measured ~190 MB of the free plan's 512 MB (light load). Heavy PDF/CSV work spikes it; if the instance restarts

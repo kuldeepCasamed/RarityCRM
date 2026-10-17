@@ -1,21 +1,38 @@
 import axios from "axios";
 import { toast } from "sonner";
+import { clearOfflineData, enqueueWrite } from "@/lib/offline";
+
+declare module "axios" {
+  interface AxiosRequestConfig {
+    /** Queue this write (label shown to the user) if the device is offline, and replay it on reconnect. */
+    offline?: string;
+  }
+}
 
 export const api = axios.create({ baseURL: "/api/crm" });
 
 api.interceptors.response.use(
   (r) => r,
-  (err) => {
+  async (err) => {
+    const cfg = err.config;
+    if (cfg?.offline && !err.response && cfg.method !== "get" && typeof window !== "undefined") {
+      await enqueueWrite({ method: cfg.method, url: cfg.url, data: cfg.data, label: cfg.offline });
+      toast.info(`${cfg.offline} saved offline`, { description: "It will sync when you're back online." });
+      return { data: null, status: 202, statusText: "Queued offline", headers: {}, config: cfg, queued: true };
+    }
     if (err.response?.status === 503 && err.response?.data?.waking && typeof window !== "undefined") {
       toast.info("Server is waking up…", { id: "server-waking", duration: 15000, description: "This can take up to a minute after a quiet period. Retrying automatically." });
     }
     if (err.response?.status === 401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
       // clear the cookie first, otherwise the route guard sends us straight back (redirect loop)
-      fetch("/api/auth/logout", { method: "POST" }).finally(() => { window.location.href = "/login"; });
+      Promise.all([fetch("/api/auth/logout", { method: "POST" }), clearOfflineData()]).finally(() => { window.location.href = "/login"; });
     }
     return Promise.reject(err);
   },
 );
+
+/** True when a write was queued offline instead of reaching the server (see `offline` request option). */
+export const isQueued = (r: unknown) => !!(r as { queued?: boolean } | undefined)?.queued;
 
 export const STATUSES = [
   ["new", "New"], ["contacted", "Contacted"], ["consult_booked", "Consult Booked"],
@@ -44,6 +61,7 @@ export const TREATMENTS = [
 const flat = (v: any): string => (Array.isArray(v) ? v.map(flat).join(" ") : v && typeof v === "object" ? Object.values(v).map(flat).join(" ") : String(v));
 export const errMsg = (e: any): string => {
   const d = e?.response?.data;
+  if (!e?.response && typeof navigator !== "undefined" && !navigator.onLine) return "You're offline — try again when connected";
   if (!d) return "Something went wrong";
   if (typeof d === "string") return d;
   return d.detail ?? Object.entries(d).map(([k, v]) => `${k}: ${flat(v)}`).join(" · ");

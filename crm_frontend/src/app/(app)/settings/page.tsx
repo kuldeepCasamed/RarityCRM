@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useState } from "react";
 import { toast } from "sonner";
+import DeviceNotifications from "@/components/DeviceNotifications";
 import { api, TREATMENTS } from "@/lib/api";
 
 type Me = { id: number; name: string; email: string; role: string; phone: string; timezone: string };
@@ -23,9 +24,9 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4 max-w-4xl">
       <h1 className="text-2xl font-semibold">Settings</h1>
-      <div className="flex gap-1 border-b">
+      <div className="flex gap-1 border-b overflow-x-auto no-scrollbar">
         {tabs.map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`px-3 py-2 text-sm ${tab === t ? "border-b-2 border-brand text-brand font-medium" : "text-stone-500"}`}>{t}</button>
+          <button key={t} onClick={(e) => { setTab(t); e.currentTarget.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); }} className={`shrink-0 whitespace-nowrap px-3 py-2 text-sm ${tab === t ? "border-b-2 border-brand text-brand font-medium" : "text-stone-500"}`}>{t}</button>
         ))}
       </div>
       {tab === "Profile" && <Profile me={me} />}
@@ -75,6 +76,7 @@ function Profile({ me }: { me: Me }) {
         <input name="confirm" type="password" placeholder="Confirm new password" required className={input} />
         <button className="bg-brand text-white rounded-md px-4 py-2 text-sm">Update password</button>
       </form>
+      <DeviceNotifications />
     </div>
   );
 }

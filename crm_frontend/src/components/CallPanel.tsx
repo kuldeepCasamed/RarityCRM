@@ -4,12 +4,14 @@ import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api, errMsg } from "@/lib/api";
+import { useOnline } from "@/lib/offline";
 
 type Phase = "idle" | "connecting" | "ringing" | "in-call" | "wrapup";
 const OUTCOMES = [["connected", "Connected"], ["interested", "Interested"], ["callback_requested", "Callback requested"], ["not_interested", "Not interested"], ["no_answer", "No answer"], ["busy", "Busy"], ["voicemail", "Voicemail"], ["wrong_number", "Wrong number"]];
 
 export default function CallPanel({ leadId, leadName, phone }: { leadId: number; leadName: string; phone: string }) {
   const qc = useQueryClient();
+  const online = useOnline();
   const [phase, setPhase] = useState<Phase>("idle");
   const [muted, setMuted] = useState(false);
   const [secs, setSecs] = useState(0);
@@ -77,7 +79,7 @@ export default function CallPanel({ leadId, leadName, phone }: { leadId: number;
     const f = new FormData(e.currentTarget);
     const fu = f.get("next_followup_at") as string;
     try {
-      await api.post(`/calls/${sessionId}/log/`, { outcome: f.get("outcome"), notes: f.get("notes"), next_followup_at: fu ? new Date(fu).toISOString() : undefined });
+      await api.post(`/calls/${sessionId}/log/`, { outcome: f.get("outcome"), notes: f.get("notes"), next_followup_at: fu ? new Date(fu).toISOString() : undefined }, { offline: "Call log" });
       toast.success("Call logged");
       ["lead", "contacts", "calls", "leads"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       setPhase("idle");
@@ -85,11 +87,11 @@ export default function CallPanel({ leadId, leadName, phone }: { leadId: number;
   }
 
   if (phase === "idle")
-    return <button onClick={startCall} disabled={!phone} title={phone ? "" : "No phone number"} className="flex items-center gap-2 bg-green-600 text-white rounded-md px-3 py-2 text-sm disabled:opacity-40"><Phone size={16} /> Call</button>;
+    return <button onClick={startCall} disabled={!phone || !online} title={!online ? "Calling needs a connection" : phone ? "" : "No phone number"} className="flex items-center gap-2 bg-green-600 text-white rounded-md px-3 py-2 text-sm disabled:opacity-40"><Phone size={16} /> Call</button>;
 
   if (phase === "wrapup")
     return (
-      <div className="fixed inset-0 bg-black/40 grid place-items-center z-20">
+      <div className="fixed inset-0 bg-black/40 grid place-items-center z-20 p-4">
         <form onSubmit={logCall} className="bg-white rounded-xl p-6 w-full max-w-md space-y-3">
           <h2 className="font-semibold">Log call with {leadName}</h2>
           <label className="text-sm block">Outcome<select name="outcome" required className="w-full border rounded-md px-3 py-2 mt-1" defaultValue="">
@@ -105,8 +107,8 @@ export default function CallPanel({ leadId, leadName, phone }: { leadId: number;
     <div className="flex items-center gap-3 bg-stone-900 text-white rounded-lg px-4 py-2 text-sm">
       <span className="animate-pulse">●</span>
       <span>{phase === "connecting" ? "Connecting…" : phase === "ringing" ? "Ringing…" : `On call ${mmss}`}</span>
-      {phase === "in-call" && <button onClick={toggleMute} className="p-1.5 rounded bg-stone-700">{muted ? <MicOff size={16} /> : <Mic size={16} />}</button>}
-      <button onClick={hangUp} className="p-1.5 rounded bg-red-600"><PhoneOff size={16} /></button>
+      {phase === "in-call" && <button onClick={toggleMute} className="p-2 rounded bg-stone-700" aria-label={muted ? "Unmute" : "Mute"}>{muted ? <MicOff size={16} /> : <Mic size={16} />}</button>}
+      <button onClick={hangUp} className="p-2 rounded bg-red-600" aria-label="Hang up"><PhoneOff size={16} /></button>
     </div>
   );
 }

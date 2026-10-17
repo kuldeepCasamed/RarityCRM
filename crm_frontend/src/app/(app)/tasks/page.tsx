@@ -8,7 +8,7 @@ const BUCKETS = [["overdue", "Overdue", "text-red-600"], ["today", "Today", "tex
 
 export default function TasksPage() {
   const qc = useQueryClient();
-  const done = useMutation({ mutationFn: (id: number) => api.patch(`/tasks/${id}/`, { is_done: true }), onSuccess: () => qc.invalidateQueries({ queryKey: ["mytasks"] }) });
+  const done = useMutation({ mutationFn: (id: number) => api.patch(`/tasks/${id}/`, { is_done: true }, { offline: "Task update" }), onSuccess: () => qc.invalidateQueries({ queryKey: ["mytasks"] }) });
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-semibold">My tasks</h1>

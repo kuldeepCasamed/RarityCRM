@@ -316,6 +316,7 @@ class Task(models.Model):
     priority = models.CharField(max_length=10, choices=Priority.choices, default=Priority.MEDIUM)
     is_done = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
+    push_reminded_at = models.DateTimeField(null=True, blank=True)  # set once the "task due" push has gone out
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -346,6 +347,7 @@ class Appointment(models.Model):
     gcal_event_id = models.CharField(max_length=255, blank=True)
     gcal_calendar_id = models.CharField(max_length=255, blank=True)
     gcal_sync_error = models.CharField(max_length=500, blank=True)
+    push_reminded_at = models.DateTimeField(null=True, blank=True)  # set once the "starting soon" push has gone out
     created_by = models.ForeignKey(CRMUser, null=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -361,6 +363,18 @@ class NotificationRecipient(models.Model):
 
     class Meta:
         unique_together = ("channel", "value")
+
+
+class PushSubscription(models.Model):
+    """A browser/device that receives Web Push notifications (PWA) for a CRM user."""
+
+    user = models.ForeignKey(CRMUser, on_delete=models.CASCADE, related_name="push_subscriptions")
+    endpoint = models.URLField(max_length=1000, unique=True)
+    p256dh = models.CharField(max_length=200)
+    auth = models.CharField(max_length=100)
+    user_agent = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
 
 
 class CallSession(models.Model):

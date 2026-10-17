@@ -11,6 +11,13 @@ if [ ! -d staticfiles ]; then
   python manage.py collectstatic --noinput
 fi
 
+# Cloud Run (K_SERVICE is set) has no build/release step: apply migrations + schedules here. A failure stops this
+# revision from becoming ready, so the previous one keeps serving. Set RUN_MIGRATIONS_ON_START=false to skip.
+if [ -n "${K_SERVICE:-}" ] && [ "${RUN_MIGRATIONS_ON_START:-true}" != "false" ]; then
+  python manage.py migrate --noinput
+  python manage.py setup_schedules
+fi
+
 pids=()
 cleanup() { kill "${pids[@]}" 2>/dev/null || true; wait 2>/dev/null || true; }
 trap cleanup SIGTERM SIGINT

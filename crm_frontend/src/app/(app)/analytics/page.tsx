@@ -49,7 +49,7 @@ export default function AnalyticsPage() {
       </p>
 
       <div className="bg-white border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm whitespace-nowrap">
+        <table className="w-full text-sm whitespace-nowrap [&_th]:pl-3 [&_td]:pl-3">
           <thead className="bg-stone-50 text-right text-stone-500">
             <tr>
               <th className="p-3 text-left">{groupBy === "campaign" ? "Source · campaign" : "Source"}</th>

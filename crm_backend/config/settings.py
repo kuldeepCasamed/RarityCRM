@@ -182,6 +182,12 @@ TWILIO_API_KEY = env("TWILIO_API_KEY", default="")
 TWILIO_API_SECRET = env("TWILIO_API_SECRET", default="")
 TWILIO_TWIML_APP_SID = env("TWILIO_TWIML_APP_SID", default="")
 TWILIO_FROM_NUMBER = env("TWILIO_FROM_NUMBER", default="")
+
+# Web Push (PWA notifications). Generate once with `python manage.py generate_vapid_keys`; changing them
+# invalidates every device subscription (users just re-enable notifications).
+VAPID_PUBLIC_KEY = env("VAPID_PUBLIC_KEY", default="")
+VAPID_PRIVATE_KEY = env("VAPID_PRIVATE_KEY", default="")
+VAPID_SUBJECT = env("VAPID_SUBJECT", default="mailto:admin@raritydental.com")  # contact for push services
 # Recording is OFF by default: enable only once consent/announcement rules are settled.
 TWILIO_RECORD_CALLS = env.bool("TWILIO_RECORD_CALLS", default=False)
 

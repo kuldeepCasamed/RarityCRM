@@ -2,12 +2,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, errMsg } from "@/lib/api";
+import { useOnline } from "@/lib/offline";
 
 type Result = { created: number; duplicates: number; errors: { row: number; error: string }[] };
 const TEMPLATE = "name,phone,email,country\nAsha Verma,+919810012345,asha@example.com,India\n";
 
 export default function ImportCsvModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
+  const online = useOnline();
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
@@ -39,7 +41,7 @@ export default function ImportCsvModal({ onClose }: { onClose: () => void }) {
           <>
             <input type="file" accept=".csv,text/csv" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(""); }} className="block text-sm" />
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <button disabled={!file || upload.isPending} onClick={() => upload.mutate()} className="bg-brand text-white rounded-md px-4 py-2 text-sm disabled:opacity-50">
+            <button disabled={!file || upload.isPending || !online} title={online ? "" : "Importing needs a connection"} onClick={() => upload.mutate()} className="bg-brand text-white rounded-md px-4 py-2 text-sm disabled:opacity-50">
               {upload.isPending ? "Importing…" : "Import"}
             </button>
           </>

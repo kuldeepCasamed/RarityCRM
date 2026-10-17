@@ -11,8 +11,8 @@ export default function CallsPage() {
   return (
     <div className="space-y-4 max-w-4xl">
       <h1 className="text-2xl font-semibold">Calls</h1>
-      <div className="bg-white border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white border rounded-lg overflow-x-auto">
+        <table className="w-full text-sm whitespace-nowrap [&_th]:pr-3 [&_td]:pr-3">
           <thead className="bg-stone-50 text-left text-stone-500"><tr><th className="p-3">When</th><th>Lead</th><th>By</th><th>Status</th><th>Duration</th><th>Recording</th></tr></thead>
           <tbody>
             {data?.results.map((c) => (

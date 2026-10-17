@@ -8,7 +8,7 @@ import EmailsTab from "@/components/EmailsTab";
 import QuotesTab from "@/components/QuotesTab";
 import CallPanel from "@/components/CallPanel";
 import LeadProfileForm from "@/components/LeadProfileForm";
-import { api, dualTime, errMsg, Lead, leadTimezone, STATUSES } from "@/lib/api";
+import { api, dualTime, errMsg, isQueued, Lead, leadTimezone, STATUSES } from "@/lib/api";
 
 const TABS = ["Overview", "Profile", "Contacts", "Notes", "Tasks", "Appointments", "Emails", "Quotes", "Calls", "History"] as const;
 
@@ -24,7 +24,7 @@ export default function LeadDetail({ params }: { params: Promise<{ id: string }>
   const { data: lead } = useQuery({ queryKey: key, queryFn: async () => (await api.get<Lead>(`/leads/${id}/`)).data });
 
   const pipeline = useMutation({
-    mutationFn: (body: object) => api.patch(`/leads/${id}/pipeline/`, body),
+    mutationFn: (body: object) => api.patch(`/leads/${id}/pipeline/`, body, { offline: "Status change" }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: key }); qc.invalidateQueries({ queryKey: ["history", id] }); toast.success("Updated"); },
   });
   const profile = useMutation({
@@ -49,9 +49,9 @@ export default function LeadDetail({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
       <Duplicates id={id} />
-      <div className="flex gap-1 border-b">
+      <div className="flex gap-1 border-b overflow-x-auto no-scrollbar">
         {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`px-3 py-2 text-sm ${tab === t ? "border-b-2 border-brand text-brand font-medium" : "text-stone-500"}`}>{t}</button>
+          <button key={t} onClick={(e) => { setTab(t); e.currentTarget.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); }} className={`shrink-0 whitespace-nowrap px-3 py-2 text-sm ${tab === t ? "border-b-2 border-brand text-brand font-medium" : "text-stone-500"}`}>{t}</button>
         ))}
       </div>
       {tab === "Overview" && <ScoreCard lead={lead} />}
@@ -126,7 +126,12 @@ function Contacts({ id }: { id: string }) {
 function Notes({ id }: { id: string }) {
   const qc = useQueryClient();
   const { data } = useList<any>("notes", id, "notes");
-  const add = useMutation({ mutationFn: (body: string) => api.post(`/leads/${id}/notes/`, { body }), onSuccess: () => qc.invalidateQueries({ queryKey: ["notes", id] }) });
+  const add = useMutation({
+    mutationFn: (body: string) => api.post(`/leads/${id}/notes/`, { body }, { offline: "Note" }),
+    onSuccess: (r, body) => isQueued(r)
+      ? qc.setQueryData<any[]>(["notes", id], (old = []) => [{ id: -Date.now(), body, author_name: "Pending sync", created_at: new Date().toISOString() }, ...old])
+      : qc.invalidateQueries({ queryKey: ["notes", id] }),
+  });
   const del = useMutation({ mutationFn: (nid: number) => api.delete(`/notes/${nid}/`), onSuccess: () => qc.invalidateQueries({ queryKey: ["notes", id] }), onError: () => toast.error("Not allowed") });
   return (
     <div className="space-y-3">
@@ -137,7 +142,7 @@ function Notes({ id }: { id: string }) {
       {data?.map((n) => (
         <div key={n.id} className="bg-white border rounded-lg p-3 text-sm flex justify-between">
           <div>{n.body}<div className="text-xs text-stone-400">{n.author_name} · {format(new Date(n.created_at), "d MMM HH:mm")}</div></div>
-          <button onClick={() => del.mutate(n.id)} className="text-xs text-red-600">Delete</button>
+          {n.id > 0 && <button onClick={() => del.mutate(n.id)} className="text-xs text-red-600">Delete</button>}
         </div>
       ))}
     </div>
@@ -148,8 +153,14 @@ function Tasks({ id }: { id: string }) {
   const qc = useQueryClient();
   const { data } = useList<any>("ltasks", id, "tasks");
   const inv = () => { qc.invalidateQueries({ queryKey: ["ltasks", id] }); qc.invalidateQueries({ queryKey: ["mytasks"] }); };
-  const add = useMutation({ mutationFn: (b: object) => api.post(`/leads/${id}/tasks/`, b), onSuccess: inv });
-  const toggle = useMutation({ mutationFn: (t: any) => api.patch(`/tasks/${t.id}/`, { is_done: !t.is_done }), onSuccess: inv });
+  const add = useMutation({
+    mutationFn: (b: { title: unknown; due_at: string }) => api.post(`/leads/${id}/tasks/`, b, { offline: "Task" }),
+    onSuccess: (r, b) => isQueued(r) ? qc.setQueryData<any[]>(["ltasks", id], (old = []) => [...old, { ...b, id: -Date.now(), is_done: false }]) : inv(),
+  });
+  const toggle = useMutation({
+    mutationFn: (t: any) => api.patch(`/tasks/${t.id}/`, { is_done: !t.is_done }, { offline: "Task update" }),
+    onSuccess: (r, t) => isQueued(r) ? qc.setQueryData<any[]>(["ltasks", id], (old = []) => old.map((x) => (x.id === t.id ? { ...x, is_done: !t.is_done } : x))) : inv(),
+  });
   return (
     <div className="space-y-3">
       <form className="flex gap-2 flex-wrap" onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); add.mutate({ title: f.get("title"), due_at: new Date(f.get("due_at") as string).toISOString() }); e.currentTarget.reset(); }}>
@@ -159,7 +170,7 @@ function Tasks({ id }: { id: string }) {
       </form>
       {data?.map((t) => (
         <label key={t.id} className="bg-white border rounded-lg p-3 text-sm flex items-center gap-2">
-          <input type="checkbox" checked={t.is_done} onChange={() => toggle.mutate(t)} />
+          <input type="checkbox" checked={t.is_done} disabled={t.id < 0} onChange={() => toggle.mutate(t)} />
           <span className={t.is_done ? "line-through text-stone-400" : ""}>{t.title}</span>
           <span className="ml-auto text-xs text-stone-400">{format(new Date(t.due_at), "d MMM HH:mm")}</span>
         </label>

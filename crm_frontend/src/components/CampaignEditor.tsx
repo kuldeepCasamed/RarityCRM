@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api, errMsg, STATUSES, TREATMENTS } from "@/lib/api";
+import { useOnline } from "@/lib/offline";
 
 const SOURCES = ["website", "google_ads", "meta_ads", "whatsapp", "phone", "walk_in", "referral", "partner", "csv", "manual"];
 const input = "w-full border rounded-md px-3 py-2 bg-white text-sm";
@@ -20,6 +21,7 @@ const toApi = (f: F) => {
 };
 
 export default function CampaignEditor({ campaign, onClose, onSaved }: { campaign: any | null; onClose: () => void; onSaved: (c: any) => void }) {
+  const online = useOnline();
   const { data: templates } = useQuery({ queryKey: ["email-templates"], queryFn: async () => (await api.get<any[]>("/email-templates/")).data });
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: async () => (await api.get("/me/")).data });
   const [saved, setSaved] = useState<any | null>(campaign);
@@ -114,18 +116,18 @@ export default function CampaignEditor({ campaign, onClose, onSaved }: { campaig
           <h3 className="text-sm font-medium">3. Test and send</h3>
           <div className="flex flex-wrap gap-2 items-center">
             <input value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder={`Test address (default: ${me?.email ?? "you"})`} className="border rounded-md px-3 py-1.5 text-sm bg-white w-72" />
-            <button disabled={!subject.trim() || !body.trim() || sendTest.isPending} onClick={() => sendTest.mutate()} className="border rounded-md px-3 py-1.5 text-sm bg-white disabled:opacity-50">{sendTest.isPending ? "Sending…" : "Send me a test"}</button>
+            <button disabled={!subject.trim() || !body.trim() || sendTest.isPending || !online} onClick={() => sendTest.mutate()} className="border rounded-md px-3 py-1.5 text-sm bg-white disabled:opacity-50">{sendTest.isPending ? "Sending…" : "Send me a test"}</button>
             <button disabled={!name.trim() || !subject.trim() || !body.trim() || save.isPending} onClick={() => save.mutate(undefined, { onSuccess: () => toast.success("Draft saved") })} className="border rounded-md px-3 py-1.5 text-sm bg-white disabled:opacity-50">Save draft</button>
           </div>
           {!confirm ? (
-            <button disabled={!valid} onClick={() => setConfirm(true)} className="bg-brand text-white rounded-md px-4 py-2 text-sm disabled:opacity-50">Review &amp; send…</button>
+            <button disabled={!valid || !online} title={online ? "" : "Sending needs a connection"} onClick={() => setConfirm(true)} className="bg-brand text-white rounded-md px-4 py-2 text-sm disabled:opacity-50">Review &amp; send…</button>
           ) : (
             <div className="border rounded-lg p-3 space-y-2 bg-stone-50 text-sm">
               <div>Send <b>"{subject}"</b> to <b>{aud?.eligible}</b> people?</div>
               <label className="flex items-center gap-2"><input type="radio" checked={when === "asap"} onChange={() => setWhen("asap")} /> As soon as office hours and the daily limit allow</label>
               <label className="flex items-center gap-2"><input type="radio" checked={when === "later"} onChange={() => setWhen("later")} /> Schedule for <input type="datetime-local" value={at} onChange={(e) => { setAt(e.target.value); setWhen("later"); }} className="border rounded px-2 py-1 bg-white" /></label>
               <p className="text-xs text-stone-500">The audience is locked when you confirm. Anyone who unsubscribes before their email goes out is skipped. You can pause or cancel any time.</p>
-              <div className="flex gap-2"><button disabled={launch.isPending || (when === "later" && !at)} onClick={() => launch.mutate()} className="bg-brand text-white rounded-md px-4 py-2 disabled:opacity-50">{launch.isPending ? "Scheduling…" : "Yes, send"}</button>
+              <div className="flex gap-2"><button disabled={launch.isPending || (when === "later" && !at) || !online} onClick={() => launch.mutate()} className="bg-brand text-white rounded-md px-4 py-2 disabled:opacity-50">{launch.isPending ? "Scheduling…" : "Yes, send"}</button>
                 <button onClick={() => setConfirm(false)} className="text-stone-500 px-2">Back</button></div>
             </div>
           )}

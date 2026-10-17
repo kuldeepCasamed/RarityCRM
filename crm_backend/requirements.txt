@@ -22,6 +22,7 @@ google-auth==2.59.1
 google-auth-httplib2==0.4.3
 googleapis-common-protos==1.75.5
 gunicorn==26.2.0
+http_ece==1.2.1
 httplib2==0.32.0
 idna==3.20
 multidict==6.9.1
@@ -33,12 +34,14 @@ proto-plus==1.29.0
 protobuf==7.36.2
 psycopg==3.3.6
 psycopg-binary==3.3.6
+py-vapid==1.9.6
 pyasn1==0.6.4
 pyasn1_modules==0.4.2
 pycparser==3.0
 PyJWT==2.15.1
 pyparsing==3.3.3
 pypdf==6.19.0
+pywebpush==2.5.0
 reportlab==5.0.1
 requests==2.34.2
 resend==2.49.0

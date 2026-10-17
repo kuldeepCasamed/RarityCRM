@@ -39,19 +39,19 @@ function LeadsInner() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">Leads {data && <span className="text-stone-400 text-base">({data.count})</span>}</h1>
         <div className="flex gap-2">
-          <a href={`/api/crm/leads/export/?${new URLSearchParams(params)}`} className="border rounded-md px-3 py-1.5 text-sm bg-white">Export CSV</a>
-          {isManager && <button onClick={() => setShowImport(true)} className="border rounded-md px-3 py-1.5 text-sm bg-white">Import CSV</button>}
-          <button onClick={() => setShowNew(true)} className="bg-brand text-white rounded-md px-3 py-1.5 text-sm">+ New lead</button>
+          <a href={`/api/crm/leads/export/?${new URLSearchParams(params)}`} className="border rounded-md px-3 py-1.5 text-sm bg-white whitespace-nowrap">Export CSV</a>
+          {isManager && <button onClick={() => setShowImport(true)} className="border rounded-md px-3 py-1.5 text-sm bg-white whitespace-nowrap">Import CSV</button>}
+          <button onClick={() => setShowNew(true)} className="bg-brand text-white rounded-md px-3 py-1.5 text-sm whitespace-nowrap">+ New lead</button>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <input defaultValue={params.q ?? ""} placeholder="Search name / phone / email"
           onKeyDown={(e) => e.key === "Enter" && setParam("q", e.currentTarget.value)}
-          className="border rounded-md px-3 py-1.5 text-sm bg-white w-64" />
+          className="border rounded-md px-3 py-1.5 text-sm bg-white w-full sm:w-64" />
         <select value={params.status ?? ""} onChange={(e) => setParam("status", e.target.value)} className="border rounded-md px-2 py-1.5 text-sm bg-white">
           <option value="">All statuses</option>
           {STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -73,7 +73,31 @@ function LeadsInner() {
         </select>
       </div>
 
-      <div className="bg-white border border-stone-200 rounded-lg overflow-hidden">
+      {/* phones: one card per lead instead of the 7-column table */}
+      <div className="md:hidden space-y-2">
+        {isLoading && <p className="text-sm text-stone-500">Loading…</p>}
+        {data?.results.map((l) => (
+          <Link key={l.id} href={`/leads/${l.id}`} className="block bg-white border border-stone-200 rounded-lg p-3 text-sm active:bg-stone-50">
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-brand truncate">{l.name}</div>
+                <div className="text-stone-500">{l.phone}</div>
+              </div>
+              <ScoreBadge score={l.score} band={l.score_band} />
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-stone-500">
+              <span className="text-stone-700">{statusLabel(l.status)}</span>·<span>{l.source}</span>·
+              <span>{l.assigned_to_name || <span className="text-amber-600">Unassigned</span>}</span>·<span>{format(new Date(l.created_at), "d MMM, HH:mm")}</span>
+              {l.needs_reply && <span className="bg-red-100 text-red-700 rounded px-1.5">↩ Needs reply</span>}
+              {l.email_invalid && <span className="bg-stone-200 text-stone-600 rounded px-1.5">bad email</span>}
+              {l.is_international && <span className="bg-sky-100 text-sky-700 rounded px-1.5">{l.country || "Intl"}</span>}
+            </div>
+          </Link>
+        ))}
+        {data?.results.length === 0 && <p className="p-6 text-center text-stone-400">No leads</p>}
+      </div>
+
+      <div className="hidden md:block bg-white border border-stone-200 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 text-left text-stone-500">
             <tr><th className="p-3">Name</th><th>Score</th><th>Phone</th><th>Status</th><th>Source</th><th>Assigned</th><th>Created</th></tr>
