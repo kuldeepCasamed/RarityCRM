@@ -20,6 +20,7 @@ def _lead_link(lead_id):
 
 
 # ---- enqueue helpers (called from views/services) ----
+def notify_capi_event(lead_id, event_name, event_id): _enqueue("run_capi_event", lead_id, event_name, event_id)
 def notify_new_lead(lead_id): _enqueue("run_new_lead_alert", lead_id)
 def notify_assigned(lead_id): _enqueue("run_assigned_alert", lead_id)
 def send_invite_email(invite_id): _enqueue("run_invite_email", invite_id)
@@ -31,6 +32,22 @@ def delete_calendar_event(calendar_id, event_id): _enqueue("run_calendar_delete"
 
 
 # ---- workers ----
+def run_capi_event(lead_id, event_name, event_id):
+    """Send one Conversions API event. A Meta outage only retries this task; it never touches lead intake."""
+    from .meta_capi import send_capi_event
+    from .models import Lead
+
+    lead = Lead.objects.get(pk=lead_id)
+    if event_id in lead.capi_sent:
+        return "already sent"
+    result = send_capi_event(lead, event_name, event_id)
+    if result.startswith("sent"):
+        lead = Lead.objects.get(pk=lead_id)  # re-read: another task may have updated the list
+        lead.capi_sent = [*lead.capi_sent, event_id]
+        lead.save(update_fields=["capi_sent"])
+    return result
+
+
 def run_new_lead_alert(lead_id):
     from .models import Lead
 

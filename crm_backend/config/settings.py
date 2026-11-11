@@ -159,6 +159,12 @@ Q_CLUSTER = {
     "sync": env.bool("Q_SYNC", default=False),
 }
 
+# --- Meta Conversions API (server-side events). Inert unless both token and pixel id are set. ---
+META_PIXEL_ID = env("META_PIXEL_ID", default="")
+META_CAPI_TOKEN = env("META_CAPI_TOKEN", default="")
+META_TEST_EVENT_CODE = env("META_TEST_EVENT_CODE", default="")  # events show only in Events Manager > Test events; remove after testing
+META_GRAPH_VERSION = env("META_GRAPH_VERSION", default="v23.0")
+
 # --- CRM settings ---
 CRM_BASE_URL = env("CRM_BASE_URL", default="http://localhost:3000")
 # On Render this defaults to the service URL; set explicitly only for a custom domain.

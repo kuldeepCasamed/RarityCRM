@@ -64,6 +64,8 @@ class CRMUserViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You cannot change your own role or deactivate yourself.")
         if me.role != "admin" and (data.get("role") == "admin" or target.role == "admin"):
             raise PermissionDenied("Only an admin can grant or change the admin role.")
+        if "user" in data and me.role != "admin":
+            raise PermissionDenied("Only an admin can change a team member's name.")
         serializer.save()
 
 

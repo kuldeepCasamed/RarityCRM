@@ -3,7 +3,7 @@ from urllib.parse import parse_qs, urlparse
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .. import services
+from .. import meta_capi, services
 from datetime import timedelta
 
 from django.utils import timezone
@@ -11,9 +11,10 @@ from django.utils import timezone
 from ..models import LeadSource, Note, Priority, Task
 from ..permissions import HasIntakeKey
 from ..serializers import PublicInterestSerializer
-from ..tasks import notify_new_lead
+from ..tasks import notify_capi_event, notify_new_lead
 from ..throttles import PublicIntakeThrottle
 
+META_FIELDS = ["meta_event_id", "meta_fbp", "meta_fbc", "meta_event_source_url", "meta_client_ip", "meta_client_user_agent"]
 ATTRIBUTION = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid"]
 
 
@@ -103,6 +104,15 @@ class InterestView(APIView):
                 title="Confirm Smile Studio consultation request" if wants_slot else "Call Smile Studio lead (design unlocked)",
                 due_at=timezone.now() + timedelta(hours=2 if wants_slot else 24),
             )
+        meta = {k: str(d[k]) for k in META_FIELDS if d.get(k)}
+        if meta:  # keep the latest browser/IP data so later events (Schedule, TreatmentBooked) still match
+            for k, v in meta.items():
+                setattr(lead, k, v)
+            lead.save(update_fields=[*meta, "updated_at"])
+        # Lead only when the browser sent an event_id (same id as its Pixel Lead, so Meta counts it once).
+        # Smile Studio bookings send none on purpose: Schedule comes from the CRM status instead.
+        if meta_capi.enabled() and meta.get("meta_event_id"):
+            notify_capi_event(lead.id, "Lead", meta["meta_event_id"])
         if created:
             notify_new_lead(lead.id)
         # never reveal whether the lead already existed

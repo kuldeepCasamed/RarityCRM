@@ -124,7 +124,27 @@ def change_status(lead: Lead, new_status: str, by: CRMUser | None = None) -> Lea
     from .emailing import stop_sequences_for_status
 
     stop_sequences_for_status(lead)  # email sequences only run while the lead is in their allowed statuses
+    _queue_status_capi_event(lead, new_status)
     return lead
+
+
+def _queue_status_capi_event(lead: Lead, new_status: str) -> None:
+    """Tell Meta when a lead reaches Consult Booked / Treatment Booked. Once per lead; never breaks the status change."""
+    from . import meta_capi, tasks
+
+    spec = meta_capi.STATUS_EVENTS.get(new_status)
+    if not spec or not meta_capi.enabled():
+        return
+    name, make_id = spec
+    event_id = make_id(lead)
+    if event_id in lead.capi_sent:
+        return
+    try:
+        tasks.notify_capi_event(lead.id, name, event_id)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("could not queue Meta event %s for lead %s", name, lead.pk)
 
 
 @transaction.atomic

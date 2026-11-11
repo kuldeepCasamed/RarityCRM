@@ -89,7 +89,7 @@ function Team({ me }: { me: Me }) {
 
   const patch = useMutation({
     mutationFn: ({ id, ...b }: any) => api.patch(`/users/${id}/`, b),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); qc.invalidateQueries({ queryKey: ["me"] }); },
     onError: (e) => toast.error(errMsg(e)),
   });
   const invite = useMutation({
@@ -142,7 +142,21 @@ function Team({ me }: { me: Me }) {
                 const self = u.id === me.id;
                 return (
                   <tr key={u.id} className="border-t">
-                    <td className="p-3">{u.name}<div className="text-xs text-stone-400">{u.email}</div></td>
+                    <td className="p-3">
+                      {me.role === "admin" ? (
+                        <div className="flex gap-1" key={`${u.first_name}|${u.last_name}`}>
+                          <input defaultValue={u.first_name} placeholder="First name" aria-label="First name" className="w-28 border rounded px-2 py-1"
+                            onBlur={(e) => {
+                              const v = e.target.value.trim();
+                              if (!v) { e.target.value = u.first_name; toast.error("First name is required"); }
+                              else if (v !== u.first_name) patch.mutate({ id: u.id, first_name: v });
+                            }} />
+                          <input defaultValue={u.last_name} placeholder="Last name" aria-label="Last name" className="w-28 border rounded px-2 py-1"
+                            onBlur={(e) => e.target.value.trim() !== u.last_name && patch.mutate({ id: u.id, last_name: e.target.value.trim() })} />
+                        </div>
+                      ) : u.name}
+                      <div className="text-xs text-stone-400">{u.email}</div>
+                    </td>
                     <td><select disabled={self} value={u.role} onChange={(e) => patch.mutate({ id: u.id, role: e.target.value })} className="border rounded px-2 py-1 bg-white">
                       {ROLES.map(([v, l]) => <option key={v} value={v} disabled={v === "admin" && me.role !== "admin"}>{l}</option>)}</select></td>
                     <td><input type="number" min={0} defaultValue={u.daily_lead_limit} className="w-20 border rounded px-2 py-1" title="0 = unlimited"

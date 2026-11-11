@@ -223,6 +223,15 @@ class Lead(models.Model):
     landing_url = models.URLField(max_length=1000, blank=True)
     referrer = models.URLField(max_length=1000, blank=True)
 
+    # Meta Pixel / Conversions API matching data (captured from the website form; never shown in the API)
+    meta_event_id = models.CharField(max_length=100, blank=True)
+    meta_fbp = models.CharField(max_length=200, blank=True)
+    meta_fbc = models.CharField(max_length=300, blank=True)
+    meta_event_source_url = models.URLField(max_length=1000, blank=True)
+    meta_client_ip = models.CharField(max_length=64, blank=True)
+    meta_client_user_agent = models.CharField(max_length=500, blank=True)
+    capi_sent = models.JSONField(default=list, blank=True, help_text="Conversions API events already sent for this lead")
+
     # consent
     consent_marketing = models.BooleanField(default=False)
     consent_recording = models.BooleanField(default=False)

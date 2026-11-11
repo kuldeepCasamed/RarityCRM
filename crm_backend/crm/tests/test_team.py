@@ -63,6 +63,17 @@ class TeamTests(APITestCase):
         self.assertEqual(self.as_(self.manager).patch(f"/api/crm/users/{self.rep.id}/", {"role": "admin"}, format="json").status_code, 403)
         self.assertEqual(self.as_(self.admin).patch(f"/api/crm/users/{self.rep.id}/", {"role": "admin"}, format="json").status_code, 200)
 
+    def test_only_admin_renames_users(self):
+        url = f"/api/crm/users/{self.rep.id}/"
+        self.assertEqual(self.as_(self.manager).patch(url, {"first_name": "X"}, format="json").status_code, 403)
+        self.assertEqual(self.as_(self.admin).patch(url, {"first_name": "  "}, format="json").status_code, 400)
+        r = self.as_(self.admin).patch(url, {"first_name": " Priya ", "last_name": "Sharma"}, format="json")
+        self.assertEqual((r.status_code, r.json()["name"]), (200, "Priya Sharma"))
+        # /me/ ignores name fields, so users cannot rename themselves
+        self.as_(self.rep).patch("/api/crm/me/", {"first_name": "Hacker"}, format="json")
+        self.rep.user.refresh_from_db()
+        self.assertEqual(self.rep.user.first_name, "Priya")
+
     def test_rep_cannot_edit_users(self):
         self.assertEqual(self.as_(self.rep).patch(f"/api/crm/users/{self.manager.id}/", {"role": "rep"}, format="json").status_code, 403)
 

@@ -15,18 +15,31 @@ from .models import (
 User = get_user_model()
 
 
+META_FIELDS = ["meta_event_id", "meta_fbp", "meta_fbc", "meta_event_source_url", "meta_client_ip", "meta_client_user_agent"]
+
+
 class CRMUserSerializer(serializers.ModelSerializer):
     name = serializers.SerializerMethodField()
     email = serializers.EmailField(source="user.email", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", max_length=150, required=False)
+    last_name = serializers.CharField(source="user.last_name", max_length=150, required=False, allow_blank=True)
 
     class Meta:
         model = CRMUser
-        fields = ["id", "name", "email", "role", "phone", "timezone", "is_active",
+        fields = ["id", "name", "first_name", "last_name", "email", "role", "phone", "timezone", "is_active",
                   "daily_lead_limit", "receives_auto_assign", "email_from", "email_signature"]
         read_only_fields = ["id", "name", "email"]
 
     def get_name(self, obj):
         return obj.user.get_full_name() or obj.user.username
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop("user", {})
+        if user_data:
+            for k, v in user_data.items():
+                setattr(instance.user, k, v)
+            instance.user.save(update_fields=list(user_data))
+        return super().update(instance, validated_data)
 
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -74,7 +87,7 @@ class LeadDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Lead
-        exclude = ["deleted_at"]
+        exclude = ["deleted_at", *META_FIELDS, "capi_sent"]
         read_only_fields = ["status", "assigned_to", "converted_at", "created_at", "updated_at",
                             "score", "score_breakdown", "scored_at", "email_opt_out", "email_invalid", "unsubscribed_at"]
 
@@ -234,6 +247,13 @@ class PublicInterestSerializer(serializers.Serializer):
     design_summary = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True)
     international = serializers.BooleanField(required=False, default=False)
     smile_studio_reference = serializers.CharField(max_length=30, required=False, allow_blank=True, allow_null=True)
+    # Meta Pixel / Conversions API matching data (optional; forwarded by the website server)
+    meta_event_id = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    meta_fbp = serializers.CharField(max_length=200, required=False, allow_blank=True, allow_null=True)
+    meta_fbc = serializers.CharField(max_length=300, required=False, allow_blank=True, allow_null=True)
+    meta_event_source_url = serializers.CharField(max_length=1000, required=False, allow_blank=True, allow_null=True)
+    meta_client_ip = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
+    meta_client_user_agent = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True)
 
 
 class CallSessionSerializer(serializers.ModelSerializer):
