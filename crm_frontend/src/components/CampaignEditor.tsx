@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { api, errMsg, STATUSES, TREATMENTS } from "@/lib/api";
 import { useOnline } from "@/lib/offline";
 
-const SOURCES = ["website", "google_ads", "meta_ads", "whatsapp", "phone", "walk_in", "referral", "partner", "csv", "manual"];
+const SOURCES = ["website", "google_ads", "meta_ads", "meta_instant_form", "meta_whatsapp", "whatsapp", "phone", "walk_in", "referral", "partner", "csv", "manual"];
 const input = "w-full border rounded-md px-3 py-2 bg-white text-sm";
 type F = { status: string[]; source: string[]; band: string; is_international: string; country: string; tag: string; treatment: string; created_from: string; created_to: string; score_min: string };
 const EMPTY: F = { status: [], source: [], band: "", is_international: "", country: "", tag: "", treatment: "", created_from: "", created_to: "", score_min: "" };

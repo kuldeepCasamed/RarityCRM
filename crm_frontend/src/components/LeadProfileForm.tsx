@@ -46,7 +46,7 @@ export default function LeadProfileForm({ lead }: { lead: any }) {
             <label className="text-sm">Timezone (IANA)<input name="timezone" defaultValue={lead.timezone} placeholder="Europe/London" className={input} /></label>
             <label className="text-sm">Language<input name="language" defaultValue={lead.language} className={input} /></label>
             <label className="text-sm">Source<select name="source" defaultValue={lead.source} className={input}>
-              {["website", "google_ads", "meta_ads", "whatsapp", "phone", "walk_in", "referral", "partner", "csv", "manual"].map((s) => <option key={s}>{s}</option>)}</select></label>
+              {["website", "google_ads", "meta_ads", "meta_instant_form", "meta_whatsapp", "whatsapp", "phone", "walk_in", "referral", "partner", "csv", "manual"].map((s) => <option key={s}>{s}</option>)}</select></label>
           </div>
           <Save />
         </Card>

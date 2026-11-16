@@ -32,6 +32,8 @@ class LeadSource(models.TextChoices):
     GOOGLE_ADS = "google_ads", "Google Ads"
     META_ADS = "meta_ads", "Meta Ads"
     WHATSAPP = "whatsapp", "WhatsApp"
+    META_INSTANT_FORM = "meta_instant_form", "Meta Instant Form"
+    META_WHATSAPP = "meta_whatsapp", "Meta WhatsApp Enquiry"
     PHONE = "phone", "Phone Call-in"
     WALK_IN = "walk_in", "Walk-in"
     REFERRAL = "referral", "Referral"
@@ -221,6 +223,8 @@ class Lead(models.Model):
     gclid = models.CharField(max_length=255, blank=True)
     fbclid = models.CharField(max_length=255, blank=True)
     landing_url = models.URLField(max_length=1000, blank=True)
+    landing_page = models.CharField(max_length=300, blank=True, help_text="Page where the visitor first arrived with campaign tags (website cookie)")
+    attribution_first_seen = models.DateTimeField(null=True, blank=True)
     referrer = models.URLField(max_length=1000, blank=True)
 
     # Meta Pixel / Conversions API matching data (captured from the website form; never shown in the API)
@@ -231,6 +235,22 @@ class Lead(models.Model):
     meta_client_ip = models.CharField(max_length=64, blank=True)
     meta_client_user_agent = models.CharField(max_length=500, blank=True)
     capi_sent = models.JSONField(default=list, blank=True, help_text="Conversions API events already sent for this lead")
+
+    # Meta Lead Ads (instant form) attribution + answers
+    meta_lead_id = models.CharField(max_length=64, unique=True, null=True, blank=True, help_text="Meta leadgen_id: idempotency key")
+    meta_form_id = models.CharField(max_length=64, blank=True)
+    meta_ad_id = models.CharField(max_length=64, blank=True)
+    meta_adset_id = models.CharField(max_length=64, blank=True)
+    meta_campaign_id = models.CharField(max_length=64, blank=True)
+    meta_ad_name = models.CharField(max_length=255, blank=True)
+    meta_adset_name = models.CharField(max_length=255, blank=True)
+    meta_campaign_name = models.CharField(max_length=255, blank=True)
+    meta_platform = models.CharField(max_length=10, blank=True, help_text="fb / ig")
+    meta_is_organic = models.BooleanField(null=True, blank=True)
+    treatment_interest = models.CharField(max_length=200, blank=True)
+    start_timeframe = models.CharField(max_length=200, blank=True)
+    meta_created_time = models.DateTimeField(null=True, blank=True)
+    meta_raw = models.JSONField(null=True, blank=True, help_text="Full Graph API response (debugging; not exposed by the API)")
 
     # consent
     consent_marketing = models.BooleanField(default=False)

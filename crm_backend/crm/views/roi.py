@@ -181,3 +181,25 @@ class SpendImportView(APIView):
                                        notes=(row.get("notes") or "").strip()[:255], created_by=profile))
         MarketingSpend.objects.bulk_create(good)  # valid rows are kept; bad rows are reported back
         return Response({"created": len(good), "errors": errors})
+
+
+class CampaignStatusView(APIView):
+    """Leads per campaign / ad set / ad, split by pipeline stage (input for cost per booked consultation)."""
+
+    permission_classes = [IsCRMManager]
+
+    def get(self, request):
+        start, end = parse_range(request.query_params)
+        leads = Lead.objects.alive().filter(created_at__date__range=(start, end)).exclude(utm_campaign="")
+        rows = (
+            leads.values("utm_campaign", "utm_term", "utm_content")
+            .annotate(
+                leads=Count("id"),
+                new=Count("id", filter=Q(status=LeadStatus.NEW)),
+                consult_booked=Count("id", filter=Q(status=LeadStatus.CONSULT_BOOKED)),
+                treatment_booked=Count("id", filter=Q(status=LeadStatus.TREATMENT_BOOKED)),
+                converted=Count("id", filter=Q(status=LeadStatus.CONVERTED)),
+            )
+            .order_by("-leads")
+        )
+        return Response({"from": start, "to": end, "results": list(rows)})

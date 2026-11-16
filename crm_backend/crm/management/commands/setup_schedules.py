@@ -10,8 +10,9 @@ JOBS = [
     ("crm.tasks.run_sequence_tick", "Email sequences", Schedule.MINUTES),
     ("crm.tasks.run_campaign_tick", "Email campaigns", Schedule.MINUTES),
     ("crm.tasks.run_push_reminders", "Push reminders", Schedule.MINUTES),
+    ("crm.tasks.run_meta_backfill", "Meta lead backfill", Schedule.MINUTES),
 ]
-MINUTES = {"Email sequences": 5, "Email campaigns": 5, "Push reminders": 5}
+MINUTES = {"Email sequences": 5, "Email campaigns": 5, "Push reminders": 5, "Meta lead backfill": 15}
 
 
 class Command(BaseCommand):

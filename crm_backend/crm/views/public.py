@@ -7,6 +7,7 @@ from .. import meta_capi, services
 from datetime import timedelta
 
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from ..models import LeadSource, Note, Priority, Task
 from ..permissions import HasIntakeKey
@@ -19,7 +20,8 @@ ATTRIBUTION = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_cont
 
 
 def attribution_from(d):
-    """Explicit payload fields win; otherwise read UTM / click ids from the landing-page URL."""
+    """The website's campaign cookie (attr_*) wins, then explicit payload fields, then the form page's URL."""
+    d = {**d, **{k: d[f"attr_{k}"] for k in ATTRIBUTION if d.get(f"attr_{k}")}}
     query = parse_qs(urlparse(d.get("submissionUrl", "")).query)
     out = {}
     for k in ATTRIBUTION:
@@ -64,6 +66,18 @@ def studio_request(d):
     return fields, "\n".join(lines), bool(when)
 
 
+def landing_fields(d):
+    """Landing page + first-seen time from the website cookie; a malformed value is dropped, never an error."""
+    out = {}
+    if d.get("attr_landing_page"):
+        out["landing_page"] = str(d["attr_landing_page"])[:300]
+    if d.get("attr_first_seen"):
+        seen = parse_datetime(str(d["attr_first_seen"]))
+        if seen:
+            out["attribution_first_seen"] = seen if timezone.is_aware(seen) else timezone.make_aware(seen)
+    return out
+
+
 class InterestView(APIView):
     """POST /api/crm/interest/ — called server-to-server by raritydental.com."""
 
@@ -96,6 +110,7 @@ class InterestView(APIView):
             consent_marketing=d.get("consent", False),
             **studio_fields,
             **attribution,
+            **landing_fields(d),
         )
         if studio_text:  # also for repeat patients: the request must reach the front desk
             Note.objects.create(lead=lead, body=studio_text)

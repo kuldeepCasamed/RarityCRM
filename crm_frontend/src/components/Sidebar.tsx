@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { clearOfflineData, usePendingWrites } from "@/lib/offline";
 import { disablePush } from "@/lib/push";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Inbox, Megaphone, Repeat, CalendarDays, CheckSquare, Phone, Columns3, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
+import { Target, BarChart3, Inbox, Megaphone, Repeat, CalendarDays, CheckSquare, Phone, Columns3, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
 
 const NAV = [
   ["/dashboard", "Dashboard", LayoutDashboard], ["/pipeline", "Pipeline", Columns3],
@@ -21,7 +21,7 @@ export function useNav() {
   const { data: counts } = useQuery({ queryKey: ["inbox-count"], queryFn: async () => (await api.get("/inbox/count/")).data, refetchInterval: 60_000 });
   const inboxBadge = (counts?.needs_reply ?? 0) + (counts?.unmatched ?? 0);
   const isManager = me?.role === "admin" || me?.role === "manager";
-  const items = isManager ? [...NAV.slice(0, 5), ["/campaigns", "Campaigns", Megaphone] as const, ["/analytics", "Analytics", BarChart3] as const, ...NAV.slice(5)] : NAV;
+  const items = isManager ? [...NAV.slice(0, 5), ["/campaigns", "Campaigns", Megaphone] as const, ["/ad-campaigns", "Ad campaigns", Target] as const, ["/analytics", "Analytics", BarChart3] as const, ...NAV.slice(5)] : NAV;
   const logout = async () => {
     if (pending > 0 && !confirm(`${pending} offline change${pending > 1 ? "s haven't" : " hasn't"} synced yet and will be lost. Sign out anyway?`)) return;
     await disablePush(); // while still signed in, so the backend forgets this device too

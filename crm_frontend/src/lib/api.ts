@@ -48,7 +48,7 @@ export type Lead = {
   assigned_to_name: string | null; tags: string[]; treatment_interests: string[];
   is_international: boolean; last_contacted_at: string | null; next_followup_at: string | null;
   created_at: string; updated_at?: string; needs_reply?: boolean; email_opt_out?: boolean; email_invalid?: boolean; score?: number; score_band?: "hot" | "warm" | "cold"; score_breakdown?: { label: string; points: number }[]; chief_complaint?: string; budget_band?: string; insurance?: string;
-  urgency?: string; landing_url?: string;
+  urgency?: string; landing_url?: string; landing_page?: string; attribution_first_seen?: string | null; utm_campaign?: string; utm_term?: string; utm_content?: string;
 };
 export type Paged<T> = { count: number; results: T[] };
 
@@ -86,3 +86,9 @@ export function dualTime(iso: string, leadTz: string, repTz = "Asia/Kolkata") {
 
 export const inr = (n: number | null | undefined) =>
   n === null || n === undefined ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
+
+export const SOURCE_LABELS: Record<string, string> = {
+  website: "Website form", google_ads: "Google Ads", meta_ads: "Meta Ads", whatsapp: "WhatsApp", meta_instant_form: "Meta instant form",
+  meta_whatsapp: "Meta WhatsApp", phone: "Phone call-in", walk_in: "Walk-in", referral: "Referral", partner: "Partner", csv: "CSV import", manual: "Manual",
+};
+export const sourceLabel = (s: string) => SOURCE_LABELS[s] ?? s;

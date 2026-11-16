@@ -2,6 +2,7 @@ import hashlib
 from unittest import mock
 
 from django.utils.module_loading import import_string
+from django.core.cache import cache
 from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -35,6 +36,7 @@ class UserDataTests(TestCase):
 @override_settings(**CAPI, Q_CLUSTER=SYNC)
 class CapiFlowTests(TransactionTestCase):  # tasks enqueue on commit
     def setUp(self):  # run queued tasks inline
+        cache.clear()
         p = mock.patch("crm.tasks.async_task", lambda path, *a: import_string(path)(*a))
         p.start()
         self.addCleanup(p.stop)
@@ -94,3 +96,45 @@ class CapiFlowTests(TransactionTestCase):  # tasks enqueue on commit
         with mock.patch("crm.meta_capi.requests.post") as post:
             services.change_status(lead, LeadStatus.CONSULT_BOOKED)
         post.assert_not_called()
+
+
+@override_settings(CRM_INTAKE_API_KEY="k")
+class AttributionTests(TestCase):
+    def setUp(self):
+        cache.clear()  # the intake endpoint is throttled; don't inherit counts from other tests
+
+    def post(self, **over):
+        data = {"firstName": "Test", "lastName": "UTM", "contactNumber": "+919810099999", "email": "utm@x.com",
+                "submissionUrl": "https://www.raritydental.com/contact-us"}
+        data.update(over)
+        with mock.patch("crm.views.public.notify_new_lead"):
+            return APIClient().post("/api/crm/interest/", data, format="json", HTTP_X_RARITY_KEY="k")
+
+    def test_meta_ad_cookie_is_stored(self):
+        r = self.post(attr_utm_source="meta", attr_utm_medium="paid_social", attr_utm_campaign="TEST_CAMPAIGN",
+                      attr_utm_term="TEST_ADSET", attr_utm_content="TEST_AD", attr_fbclid="TEST123",
+                      attr_landing_page="https://www.raritydental.com/", attr_first_seen="2026-11-16T10:00:00.000Z")
+        self.assertEqual(r.status_code, 201)
+        lead = Lead.objects.get(email="utm@x.com")
+        self.assertEqual(lead.source, "meta_ads")
+        self.assertEqual((lead.utm_campaign, lead.utm_term, lead.utm_content), ("TEST_CAMPAIGN", "TEST_ADSET", "TEST_AD"))
+        self.assertEqual((lead.fbclid, lead.landing_page), ("TEST123", "https://www.raritydental.com/"))
+        self.assertIsNotNone(lead.attribution_first_seen)
+
+    def test_no_attribution_is_plain_website_lead(self):
+        self.assertEqual(self.post().status_code, 201)
+        lead = Lead.objects.get(email="utm@x.com")
+        self.assertEqual((lead.source, lead.utm_campaign, lead.landing_page), ("website", "", ""))
+
+    def test_google_and_bad_values_never_fail_the_lead(self):
+        r = self.post(attr_utm_source="google", attr_first_seen="not-a-date")
+        self.assertEqual(r.status_code, 201)
+        lead = Lead.objects.get(email="utm@x.com")
+        self.assertEqual(lead.source, "google_ads")
+        self.assertIsNone(lead.attribution_first_seen)
+
+    def test_fbclid_hidden_from_staff_api(self):
+        from crm.serializers import LeadDetailSerializer
+
+        self.assertNotIn("fbclid", LeadDetailSerializer().fields)
+        self.assertIn("utm_campaign", LeadDetailSerializer().fields)

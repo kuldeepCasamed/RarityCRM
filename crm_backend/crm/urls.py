@@ -70,6 +70,7 @@ urlpatterns = [
     path("calls/<int:pk>/recording/", calls.CallRecordingView.as_view()),
     path("analytics/dashboard/", analytics.DashboardView.as_view()),
     path("analytics/source-roi/", roi.SourceROIView.as_view()),
+    path("analytics/campaigns/", roi.CampaignStatusView.as_view()),
     path("marketing-spend/import/", roi.SpendImportView.as_view()),
     path("analytics/rep-performance/", analytics.RepPerformanceView.as_view()),
     path("analytics/response-time/", analytics.ResponseTimeView.as_view()),

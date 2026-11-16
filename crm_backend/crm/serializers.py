@@ -68,7 +68,7 @@ class LeadListSerializer(serializers.ModelSerializer):
         model = Lead
         fields = ["id", "name", "email", "phone", "country", "status", "source", "priority",
                   "assigned_to", "assigned_to_name", "tags", "treatment_interests",
-                  "is_international", "last_contacted_at", "next_followup_at", "created_at", "score", "score_band", "needs_reply", "email_opt_out", "email_invalid"]
+                  "is_international", "last_contacted_at", "next_followup_at", "created_at", "score", "score_band", "needs_reply", "email_opt_out", "email_invalid", "utm_campaign"]
 
     def get_assigned_to_name(self, obj):
         return obj.assigned_to.user.get_full_name() if obj.assigned_to else None
@@ -87,7 +87,7 @@ class LeadDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Lead
-        exclude = ["deleted_at", *META_FIELDS, "capi_sent"]
+        exclude = ["deleted_at", *META_FIELDS, "capi_sent", "meta_raw", "fbclid"]
         read_only_fields = ["status", "assigned_to", "converted_at", "created_at", "updated_at",
                             "score", "score_breakdown", "scored_at", "email_opt_out", "email_invalid", "unsubscribed_at"]
 
@@ -247,6 +247,15 @@ class PublicInterestSerializer(serializers.Serializer):
     design_summary = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True)
     international = serializers.BooleanField(required=False, default=False)
     smile_studio_reference = serializers.CharField(max_length=30, required=False, allow_blank=True, allow_null=True)
+    # Campaign attribution captured by the website cookie (last non-empty touch). All optional.
+    attr_utm_source = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    attr_utm_medium = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    attr_utm_campaign = serializers.CharField(max_length=200, required=False, allow_blank=True, allow_null=True)
+    attr_utm_term = serializers.CharField(max_length=200, required=False, allow_blank=True, allow_null=True)
+    attr_utm_content = serializers.CharField(max_length=200, required=False, allow_blank=True, allow_null=True)
+    attr_fbclid = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True)
+    attr_landing_page = serializers.CharField(max_length=300, required=False, allow_blank=True, allow_null=True)
+    attr_first_seen = serializers.CharField(max_length=40, required=False, allow_blank=True, allow_null=True)
     # Meta Pixel / Conversions API matching data (optional; forwarded by the website server)
     meta_event_id = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
     meta_fbp = serializers.CharField(max_length=200, required=False, allow_blank=True, allow_null=True)

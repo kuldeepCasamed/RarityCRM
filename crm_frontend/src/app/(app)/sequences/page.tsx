@@ -12,7 +12,7 @@ type Seq = {
   from_user: number | null; from_user_name: string | null; steps: Step[];
   stats: { active: number; completed: number; stopped: number; replied: number; booked: number; unsubscribed: number; emails_sent: number };
 };
-const SOURCES = ["website", "google_ads", "meta_ads", "whatsapp", "phone", "walk_in", "referral", "partner", "csv", "manual"];
+const SOURCES = ["website", "google_ads", "meta_ads", "meta_instant_form", "meta_whatsapp", "whatsapp", "phone", "walk_in", "referral", "partner", "csv", "manual"];
 const input = "w-full border rounded-md px-3 py-2 bg-white text-sm";
 const STOP_REASON: Record<string, string> = { replied: "replied", progressed: "moved on", booked: "booked", unsubscribed: "unsubscribed", bad_email: "bad email", no_email: "no email", deleted: "lead archived", manual: "stopped by a person", send_failed: "sending failed" };
 

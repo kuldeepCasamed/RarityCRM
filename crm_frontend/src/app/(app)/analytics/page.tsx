@@ -11,7 +11,7 @@ type Row = {
   hot: number; avg_score: number | null; spend: number; revenue: number; cost_per_lead: number | null; cost_per_consult: number | null;
   cost_per_conversion: number | null; conversion_rate: number | null; roas: number | null; roi_pct: number | null;
 };
-const SOURCES = ["website", "google_ads", "meta_ads", "whatsapp", "phone", "walk_in", "referral", "partner", "csv", "manual"];
+const SOURCES = ["website", "google_ads", "meta_ads", "meta_instant_form", "meta_whatsapp", "whatsapp", "phone", "walk_in", "referral", "partner", "csv", "manual"];
 const input = "border rounded-md px-3 py-1.5 bg-white text-sm";
 const dash = (v: number | null, f: (n: number) => string = String) => (v === null || v === undefined ? "—" : f(v));
 

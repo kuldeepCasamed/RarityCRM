@@ -18,6 +18,9 @@ class LeadFilter(django_filters.FilterSet):
     score_min = django_filters.NumberFilter(field_name="score", lookup_expr="gte")
     status = django_filters.BaseInFilter(field_name="status")
     source = django_filters.BaseInFilter(field_name="source")
+    utm_campaign = django_filters.CharFilter(field_name="utm_campaign", lookup_expr="iexact")
+    utm_term = django_filters.CharFilter(field_name="utm_term", lookup_expr="iexact")  # Meta ad set
+    utm_content = django_filters.CharFilter(field_name="utm_content", lookup_expr="iexact")  # Meta ad
 
     class Meta:
         model = Lead

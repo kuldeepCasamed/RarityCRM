@@ -100,10 +100,10 @@ function LeadsInner() {
       <div className="hidden md:block bg-white border border-stone-200 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 text-left text-stone-500">
-            <tr><th className="p-3">Name</th><th>Score</th><th>Phone</th><th>Status</th><th>Source</th><th>Assigned</th><th>Created</th></tr>
+            <tr><th className="p-3">Name</th><th>Score</th><th>Phone</th><th>Status</th><th>Source</th><th>Campaign</th><th>Assigned</th><th>Created</th></tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td className="p-3" colSpan={7}>Loading…</td></tr>}
+            {isLoading && <tr><td className="p-3" colSpan={8}>Loading…</td></tr>}
             {data?.results.map((l) => (
               <tr key={l.id} className="border-t hover:bg-stone-50">
                 <td className="p-3"><Link href={`/leads/${l.id}`} className="font-medium text-brand">{l.name}</Link>
@@ -111,12 +111,13 @@ function LeadsInner() {
                   {l.email_invalid && <span className="ml-2 text-xs bg-stone-200 text-stone-600 rounded px-1.5" title="Email bounced">bad email</span>}
                   {l.is_international && <span className="ml-2 text-xs bg-sky-100 text-sky-700 rounded px-1.5">{l.country || "Intl"}</span>}</td>
                 <td><ScoreBadge score={l.score} band={l.score_band} /></td>
-                <td>{l.phone}</td><td>{statusLabel(l.status)}</td><td>{l.source}</td>
+                <td>{l.phone}</td><td>{statusLabel(l.status)}</td><td>{l.source}</td><td className="max-w-[12rem] truncate" title={l.utm_campaign}>{l.utm_campaign || "—"}</td>
+                <td className="max-w-[12rem] truncate" title={l.utm_campaign}>{l.utm_campaign || "—"}</td>
                 <td>{l.assigned_to_name || <span className="text-amber-600">Unassigned</span>}</td>
                 <td>{format(new Date(l.created_at), "d MMM, HH:mm")}</td>
               </tr>
             ))}
-            {data?.results.length === 0 && <tr><td className="p-6 text-center text-stone-400" colSpan={7}>No leads</td></tr>}
+            {data?.results.length === 0 && <tr><td className="p-6 text-center text-stone-400" colSpan={8}>No leads</td></tr>}
           </tbody>
         </table>
       </div>
@@ -132,7 +133,7 @@ function LeadsInner() {
             <input name="email" type="email" placeholder="Email" className="w-full border rounded-md px-3 py-2" />
             <input name="country" placeholder="Country" className="w-full border rounded-md px-3 py-2" />
             <select name="source" defaultValue="manual" className="w-full border rounded-md px-3 py-2">
-              {["manual", "phone", "walk_in", "whatsapp", "referral", "partner"].map((s) => <option key={s}>{s}</option>)}
+              {["manual", "phone", "walk_in", "whatsapp", "meta_whatsapp", "referral", "partner"].map((s) => <option key={s}>{s}</option>)}
             </select>
             <button className="w-full bg-brand text-white rounded-md py-2">Create</button>
           </form>

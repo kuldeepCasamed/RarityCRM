@@ -10,7 +10,7 @@ HOT, WARM = 60, 30
 
 HIGH_VALUE_TREATMENTS = {"implants", "full_mouth", "smile_design", "invisalign", "single_day"}
 SOURCE_POINTS = {"referral": 10, "walk_in": 8, "phone": 8, "whatsapp": 8, "partner": 6, "google_ads": 6,
-                 "website": 5, "meta_ads": 3}
+                 "website": 5, "meta_ads": 3, "meta_instant_form": 3, "meta_whatsapp": 8}
 STAGE_POINTS = {LeadStatus.CONTACTED: 5, LeadStatus.CONSULT_BOOKED: 15, LeadStatus.CONSULT_DONE: 22,
                 LeadStatus.PLAN_SENT: 28, LeadStatus.NEGOTIATING: 33, LeadStatus.TREATMENT_BOOKED: 40}
 CONNECTED = {"connected", "interested", "callback_requested"}

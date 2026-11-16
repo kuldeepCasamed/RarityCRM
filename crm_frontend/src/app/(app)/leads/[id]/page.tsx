@@ -8,7 +8,7 @@ import EmailsTab from "@/components/EmailsTab";
 import QuotesTab from "@/components/QuotesTab";
 import CallPanel from "@/components/CallPanel";
 import LeadProfileForm from "@/components/LeadProfileForm";
-import { api, dualTime, errMsg, isQueued, Lead, leadTimezone, STATUSES } from "@/lib/api";
+import { api, dualTime, errMsg, isQueued, Lead, leadTimezone, sourceLabel, STATUSES } from "@/lib/api";
 
 const TABS = ["Overview", "Profile", "Contacts", "Notes", "Tasks", "Appointments", "Emails", "Quotes", "Calls", "History"] as const;
 
@@ -55,6 +55,7 @@ export default function LeadDetail({ params }: { params: Promise<{ id: string }>
         ))}
       </div>
       {tab === "Overview" && <ScoreCard lead={lead} />}
+      {tab === "Overview" && <AdSource lead={lead} />}
       {tab === "Overview" && <Overview lead={lead} onSave={(b) => profile.mutate(b)} onPipeline={(b) => pipeline.mutate(b)} />}
       {tab === "Profile" && <LeadProfileForm key={lead.updated_at} lead={lead} />}
       {tab === "Contacts" && <Contacts id={id} />}
@@ -66,6 +67,25 @@ export default function LeadDetail({ params }: { params: Promise<{ id: string }>
       {tab === "Calls" && <LeadCalls id={id} />}
       {tab === "History" && <History id={id} />}
     </div>
+  );
+}
+
+function AdSource({ lead }: { lead: Lead }) {
+  const rows: [string, string][] = [
+    ["Source", sourceLabel(lead.source)],
+    ["Campaign (utm_campaign)", lead.utm_campaign || "—"],
+    ["Ad set (utm_term)", lead.utm_term || "—"],
+    ["Ad (utm_content)", lead.utm_content || "—"],
+    ["Landing page", lead.landing_page || lead.landing_url || "—"],
+    ["First seen", lead.attribution_first_seen ? format(new Date(lead.attribution_first_seen), "d MMM yyyy, HH:mm") : "—"],
+  ];
+  return (
+    <section className="bg-white border rounded-lg p-4">
+      <h2 className="text-sm font-semibold mb-3">Ad source</h2>
+      <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+        {rows.map(([k, v]) => <div key={k} className="min-w-0"><dt className="text-xs text-stone-500">{k}</dt><dd className="break-words">{v}</dd></div>)}
+      </dl>
+    </section>
   );
 }
 

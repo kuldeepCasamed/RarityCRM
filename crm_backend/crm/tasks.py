@@ -22,6 +22,8 @@ def _lead_link(lead_id):
 # ---- enqueue helpers (called from views/services) ----
 def notify_capi_event(lead_id, event_name, event_id): _enqueue("run_capi_event", lead_id, event_name, event_id)
 def notify_new_lead(lead_id): _enqueue("run_new_lead_alert", lead_id)
+def notify_meta_lead(lead_id, repeat=False): _enqueue("run_new_lead_alert", lead_id, repeat)
+def enqueue_meta_lead(leadgen_id): async_task("crm.tasks.fetch_meta_lead", leadgen_id)
 def notify_assigned(lead_id): _enqueue("run_assigned_alert", lead_id)
 def send_invite_email(invite_id): _enqueue("run_invite_email", invite_id)
 def notify_email_reply(lead_id, message_id): _enqueue("run_email_reply_alert", lead_id, message_id)
@@ -48,22 +50,76 @@ def run_capi_event(lead_id, event_name, event_id):
     return result
 
 
-def run_new_lead_alert(lead_id):
+def run_new_lead_alert(lead_id, repeat=False):
     from .models import Lead
 
     lead = Lead.objects.select_related("assigned_to__user").get(pk=lead_id)
-    safe_push([*managers(), lead.assigned_to], f"New lead: {lead.name}",
-              " · ".join(x for x in (lead.get_source_display(), lead.country, lead.chief_complaint) if x), f"/leads/{lead.id}", f"lead-{lead.id}")
+    detail = [lead.get_source_display(), lead.country, lead.treatment_interest or lead.chief_complaint]
+    if lead.start_timeframe:
+        detail.append(f"start: {lead.start_timeframe}")
+    if lead.meta_campaign_name:
+        detail.append(lead.meta_campaign_name)
+    title = f"{'Repeat enquiry' if repeat else 'New lead'}: {lead.name}"
+    safe_push([*managers(), lead.assigned_to], title, " · ".join(x for x in detail if x), f"/leads/{lead.id}", f"lead-{lead.id}")
     to = manager_emails()
     if lead.assigned_to and lead.assigned_to.user.email:
         to.append(lead.assigned_to.user.email)
     html = render(
-        "New Lead", [("Name", lead.name), ("Phone", lead.phone), ("Email", lead.email),
-                     ("Country", lead.country), ("Source", lead.get_source_display()),
-                     ("Page", lead.landing_url), ("Message", lead.chief_complaint)],
+        "Repeat enquiry" if repeat else "New Lead",
+        [("Name", lead.name), ("Phone", lead.phone), ("Email", lead.email),
+         ("Country", lead.country), ("Source", lead.get_source_display()),
+         ("Treatment", lead.treatment_interest), ("Wants to start", lead.start_timeframe),
+         ("Campaign", lead.meta_campaign_name), ("Ad set", lead.meta_adset_name), ("Ad", lead.meta_ad_name),
+         ("Note", "Repeat enquiry: an open lead with this phone already exists" if repeat else ""),
+         ("Page", lead.landing_url), ("Message", lead.chief_complaint)],
         _lead_link(lead.id),
     )
-    return send_email(sorted(set(to)), f"New lead: {lead.name}", html)
+    return send_email(sorted(set(to)), title, html)
+
+
+META_LEAD_MAX_ATTEMPTS = 5
+
+
+def fetch_meta_lead(leadgen_id, attempt=1):
+    """Fetch one instant-form lead from Meta and create it. A Graph error retries with backoff (2, 4, 8, 16 min);
+    after the last attempt the front desk is alerted (leadgen id only, no PII) and the backfill job still catches it."""
+    import logging
+
+    from django_q.models import Schedule
+
+    from . import meta_leads
+
+    log = logging.getLogger(__name__)
+    if not meta_leads.enabled():
+        return "skipped: META_SYSTEM_USER_TOKEN not set"
+    try:
+        lead, created, repeat = meta_leads.fetch_and_ingest(str(leadgen_id))
+    except Exception:
+        if attempt < META_LEAD_MAX_ATTEMPTS:
+            Schedule.objects.create(
+                func="crm.tasks.fetch_meta_lead", args=f"{str(leadgen_id)!r},{attempt + 1}", schedule_type=Schedule.ONCE,
+                next_run=timezone.now() + timedelta(minutes=2 ** attempt), name=f"meta-lead-retry-{leadgen_id}-{attempt + 1}",
+            )
+            log.warning("meta lead %s fetch failed (attempt %s), retry scheduled", leadgen_id, attempt)
+            return f"failed attempt {attempt}, retry scheduled"
+        log.error("meta lead %s could not be fetched after %s attempts", leadgen_id, attempt)
+        safe_push(managers(), "Meta lead not imported", f"Lead {leadgen_id} failed to import. Check the CRM logs.", "/leads", f"metafail-{leadgen_id}")
+        send_email(manager_emails(), "Meta lead failed to import",
+                   render("Meta lead failed to import", [("Meta lead id", str(leadgen_id)), ("What to do", "The 15-minute backfill will retry it; if it keeps failing, check META_SYSTEM_USER_TOKEN.")]))
+        raise
+    if created:
+        run_new_lead_alert(lead.id, bool(repeat))
+        return f"created lead {lead.id}"
+    return "already imported"
+
+
+def run_meta_backfill():
+    """Every 15 minutes: import leads whose webhook never arrived."""
+    from . import meta_leads
+
+    if not meta_leads.enabled() or not settings.META_LEAD_FORM_IDS:
+        return "skipped: Meta lead ads not configured"
+    return f"meta backfill: {meta_leads.backfill()}"
 
 
 def run_assigned_alert(lead_id):

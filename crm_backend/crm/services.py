@@ -79,12 +79,12 @@ def pick_assignee():
 
 
 @transaction.atomic
-def create_lead(*, auto_assign=True, changed_by=None, **fields) -> tuple[Lead, bool]:
-    """Create a lead unless a duplicate (phone/email) exists.
+def create_lead(*, auto_assign=True, changed_by=None, force=False, **fields) -> tuple[Lead, bool]:
+    """Create a lead unless a duplicate (phone/email) exists (`force` skips that check).
     Returns (lead, created)."""
     fields["phone"] = normalize_phone(fields.get("phone", ""), country=fields.get("country", ""))
     fields["email"] = (fields.get("email") or "").strip().lower()
-    existing = find_duplicate(fields["email"], fields["phone"])
+    existing = None if force else find_duplicate(fields["email"], fields["phone"])
     if existing:
         return existing, False
     lead = Lead.objects.create(**fields)
@@ -133,6 +133,8 @@ def _queue_status_capi_event(lead: Lead, new_status: str) -> None:
     from . import meta_capi, tasks
 
     spec = meta_capi.STATUS_EVENTS.get(new_status)
+    if lead.source == "meta_instant_form":  # these report to the Page-linked dataset (Phase 2), not the website Pixel
+        return
     if not spec or not meta_capi.enabled():
         return
     name, make_id = spec

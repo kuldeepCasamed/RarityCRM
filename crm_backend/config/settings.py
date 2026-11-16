@@ -138,6 +138,7 @@ REST_FRAMEWORK = {
         "password_reset_request": "60/hour",
         "password_reset_confirm": "120/hour",
         "calls": "30/hour",
+        "meta_webhook": "300/minute",
     },
 }
 
@@ -164,6 +165,14 @@ META_PIXEL_ID = env("META_PIXEL_ID", default="")
 META_CAPI_TOKEN = env("META_CAPI_TOKEN", default="")
 META_TEST_EVENT_CODE = env("META_TEST_EVENT_CODE", default="")  # events show only in Events Manager > Test events; remove after testing
 META_GRAPH_VERSION = env("META_GRAPH_VERSION", default="v23.0")
+
+# --- Meta Lead Ads (instant forms) -> CRM. Inert unless the app secret / system-user token are set. ---
+META_APP_ID = env("META_APP_ID", default="")
+META_APP_SECRET = env("META_APP_SECRET", default="")  # webhook signature check
+META_LEADS_VERIFY_TOKEN = env("META_LEADS_VERIFY_TOKEN", default="")
+META_SYSTEM_USER_TOKEN = env("META_SYSTEM_USER_TOKEN", default="")
+META_PAGE_ID = env("META_PAGE_ID", default="531701103364168")
+META_LEAD_FORM_IDS = env.list("META_LEAD_FORM_IDS", default=[])
 
 # --- CRM settings ---
 CRM_BASE_URL = env("CRM_BASE_URL", default="http://localhost:3000")

@@ -19,3 +19,7 @@ class PasswordResetRequestThrottle(AnonRateThrottle):
 
 class PasswordResetConfirmThrottle(AnonRateThrottle):
     scope = "password_reset_confirm"
+
+
+class MetaWebhookThrottle(AnonRateThrottle):
+    scope = "meta_webhook"
