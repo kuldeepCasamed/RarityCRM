@@ -723,3 +723,32 @@ class CampaignRecipient(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["campaign", "lead"], name="uniq_campaign_recipient")]
+
+
+class ContactClick(models.Model):
+    """Anonymous WhatsApp / Call button tap on the website, with the visitor's stored ad attribution.
+
+    Deliberately holds no personal data: no IP, no user agent, no contact details."""
+
+    class Channel(models.TextChoices):
+        WHATSAPP = "whatsapp", "WhatsApp"
+        CALL = "call", "Call"
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    channel = models.CharField(max_length=10, choices=Channel.choices)
+    page_path = models.CharField(max_length=300, blank=True, default="")
+    button_location = models.CharField(max_length=50, null=True, blank=True)
+    source = models.CharField(max_length=30, default="website")
+    utm_source = models.CharField(max_length=100, null=True, blank=True)
+    utm_medium = models.CharField(max_length=100, null=True, blank=True)
+    utm_campaign = models.CharField(max_length=200, null=True, blank=True)
+    utm_term = models.CharField(max_length=200, null=True, blank=True)
+    utm_content = models.CharField(max_length=200, null=True, blank=True)
+    landing_page = models.CharField(max_length=300, null=True, blank=True)
+    session_id = models.CharField(max_length=64, null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.channel} click {self.created_at:%Y-%m-%d %H:%M}"

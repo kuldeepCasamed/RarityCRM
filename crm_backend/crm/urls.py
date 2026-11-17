@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import activity, analytics, calls, emails, password_reset, public, push, quotes, roi, team
+from .views import contact_clicks, activity, analytics, calls, emails, password_reset, public, push, quotes, roi, team
 from .views.leads import LeadViewSet
 
 router = DefaultRouter()
@@ -71,6 +71,7 @@ urlpatterns = [
     path("analytics/dashboard/", analytics.DashboardView.as_view()),
     path("analytics/source-roi/", roi.SourceROIView.as_view()),
     path("analytics/campaigns/", roi.CampaignStatusView.as_view()),
+    path("analytics/contact-clicks/", contact_clicks.ContactClickReportView.as_view()),
     path("marketing-spend/import/", roi.SpendImportView.as_view()),
     path("analytics/rep-performance/", analytics.RepPerformanceView.as_view()),
     path("analytics/response-time/", analytics.ResponseTimeView.as_view()),
