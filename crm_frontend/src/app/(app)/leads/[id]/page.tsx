@@ -8,7 +8,7 @@ import EmailsTab from "@/components/EmailsTab";
 import QuotesTab from "@/components/QuotesTab";
 import CallPanel from "@/components/CallPanel";
 import LeadProfileForm from "@/components/LeadProfileForm";
-import { api, dualTime, errMsg, isQueued, Lead, leadTimezone, sourceLabel, STATUSES } from "@/lib/api";
+import { api, decodeUtm, dualTime, errMsg, isQueued, Lead, leadTimezone, sourceLabel, STATUSES } from "@/lib/api";
 
 const TABS = ["Overview", "Profile", "Contacts", "Notes", "Tasks", "Appointments", "Emails", "Quotes", "Calls", "History"] as const;
 
@@ -73,9 +73,9 @@ export default function LeadDetail({ params }: { params: Promise<{ id: string }>
 function AdSource({ lead }: { lead: Lead }) {
   const rows: [string, string][] = [
     ["Source", sourceLabel(lead.source)],
-    ["Campaign (utm_campaign)", lead.utm_campaign || "—"],
-    ["Ad set (utm_term)", lead.utm_term || "—"],
-    ["Ad (utm_content)", lead.utm_content || "—"],
+    ["Campaign (utm_campaign)", decodeUtm(lead.utm_campaign) || "—"],
+    ["Ad set (utm_term)", decodeUtm(lead.utm_term) || "—"],
+    ["Ad (utm_content)", decodeUtm(lead.utm_content) || "—"],
     ["Landing page", lead.landing_page || lead.landing_url || "—"],
     ["First seen", lead.attribution_first_seen ? format(new Date(lead.attribution_first_seen), "d MMM yyyy, HH:mm") : "—"],
   ];

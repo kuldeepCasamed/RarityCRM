@@ -2,7 +2,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, decodeUtm } from "@/lib/api";
+
+const dec = <T extends { utm_campaign: string; utm_term: string; utm_content: string }>(r: T): T => ({ ...r, utm_campaign: decodeUtm(r.utm_campaign), utm_term: decodeUtm(r.utm_term), utm_content: decodeUtm(r.utm_content) });
 
 type Click = { date: string; channel: "whatsapp" | "call"; source: string; utm_campaign: string; utm_term: string; utm_content: string; clicks: number };
 type CampaignLeads = { utm_campaign: string; utm_term: string; utm_content: string; leads: number };
@@ -20,12 +22,12 @@ export default function ContactClicksPage() {
   const clicks = useQuery({
     queryKey: ["contact-clicks", days],
     enabled: !!me,
-    queryFn: async () => (await api.get<{ results: Click[] }>("/analytics/contact-clicks/", { params: { from, to } })).data.results,
+    queryFn: async () => (await api.get<{ results: Click[] }>("/analytics/contact-clicks/", { params: { from, to } })).data.results.map(dec),
   });
   const leads = useQuery({
     queryKey: ["ad-campaigns", days],
     enabled: isManager,
-    queryFn: async () => (await api.get<{ results: CampaignLeads[] }>("/analytics/campaigns/", { params: { from, to } })).data.results,
+    queryFn: async () => (await api.get<{ results: CampaignLeads[] }>("/analytics/campaigns/", { params: { from, to } })).data.results.map(dec),
   });
 
   const rows = clicks.data ?? [];
@@ -43,7 +45,7 @@ export default function ContactClicksPage() {
   for (const l of leads.data ?? []) {
     const k = key(l);
     const row = table.get(k) ?? { utm_campaign: l.utm_campaign, utm_term: l.utm_term, utm_content: l.utm_content, whatsapp: 0, call: 0, leads: 0 };
-    row.leads = l.leads;
+    row.leads += l.leads;
     table.set(k, row);
   }
   const campaignRows = [...table.values()].sort((a, b) => b.whatsapp + b.call + b.leads - (a.whatsapp + a.call + a.leads));

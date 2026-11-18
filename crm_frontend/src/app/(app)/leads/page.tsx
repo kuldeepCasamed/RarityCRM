@@ -7,7 +7,7 @@ import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import ScoreBadge from "@/components/ScoreBadge";
 import ImportCsvModal from "@/components/ImportCsvModal";
-import { api, Lead, Paged, STATUSES, statusLabel } from "@/lib/api";
+import { api, decodeUtm, Lead, Paged, STATUSES, statusLabel } from "@/lib/api";
 
 function LeadsInner() {
   const sp = useSearchParams();
@@ -111,8 +111,8 @@ function LeadsInner() {
                   {l.email_invalid && <span className="ml-2 text-xs bg-stone-200 text-stone-600 rounded px-1.5" title="Email bounced">bad email</span>}
                   {l.is_international && <span className="ml-2 text-xs bg-sky-100 text-sky-700 rounded px-1.5">{l.country || "Intl"}</span>}</td>
                 <td><ScoreBadge score={l.score} band={l.score_band} /></td>
-                <td>{l.phone}</td><td>{statusLabel(l.status)}</td><td>{l.source}</td><td className="max-w-[12rem] truncate" title={l.utm_campaign}>{l.utm_campaign || "—"}</td>
-                <td className="max-w-[12rem] truncate" title={l.utm_campaign}>{l.utm_campaign || "—"}</td>
+                <td>{l.phone}</td><td>{statusLabel(l.status)}</td><td>{l.source}</td><td className="max-w-[12rem] truncate" title={decodeUtm(l.utm_campaign)}>{decodeUtm(l.utm_campaign) || "—"}</td>
+                <td className="max-w-[12rem] truncate" title={decodeUtm(l.utm_campaign)}>{decodeUtm(l.utm_campaign) || "—"}</td>
                 <td>{l.assigned_to_name || <span className="text-amber-600">Unassigned</span>}</td>
                 <td>{format(new Date(l.created_at), "d MMM, HH:mm")}</td>
               </tr>

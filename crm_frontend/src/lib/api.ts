@@ -91,4 +91,9 @@ export const SOURCE_LABELS: Record<string, string> = {
   website: "Website form", google_ads: "Google Ads", meta_ads: "Meta Ads", whatsapp: "WhatsApp", meta_instant_form: "Meta instant form",
   meta_whatsapp: "Meta WhatsApp", phone: "Phone call-in", walk_in: "Walk-in", referral: "Referral", partner: "Partner", csv: "CSV import", manual: "Manual",
 };
+/** Ad platforms send campaign names URL-encoded ("A%7CB", "a+b"): show them as typed. */
+export const decodeUtm = (s?: string | null) => {
+  if (!s) return "";
+  try { return decodeURIComponent(s.replace(/\+/g, " ")); } catch { return s; }
+};
 export const sourceLabel = (s: string) => SOURCE_LABELS[s] ?? s;

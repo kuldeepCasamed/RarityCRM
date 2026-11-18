@@ -2,7 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, decodeUtm } from "@/lib/api";
 
 type Row = {
   utm_campaign: string; utm_term: string; utm_content: string;
@@ -23,7 +23,15 @@ export default function AdCampaignsPage() {
   });
 
   if (me && !isManager) return <p className="text-stone-500">Ad campaigns is available to managers and admins.</p>;
-  const rows = data?.results ?? [];
+  const merged = new Map<string, Row>();
+  for (const r of data?.results ?? []) {
+    const d = { ...r, utm_campaign: decodeUtm(r.utm_campaign), utm_term: decodeUtm(r.utm_term), utm_content: decodeUtm(r.utm_content) };
+    const k = [d.utm_campaign, d.utm_term, d.utm_content].join("\u0001");
+    const m = merged.get(k);
+    if (!m) merged.set(k, d);
+    else for (const f of ["leads", "new", "consult_booked", "treatment_booked", "converted"] as const) m[f] += d[f];
+  }
+  const rows = [...merged.values()];
   const total = rows.reduce(
     (t, r) => ({ leads: t.leads + r.leads, new: t.new + r.new, consult_booked: t.consult_booked + r.consult_booked, treatment_booked: t.treatment_booked + r.treatment_booked, converted: t.converted + r.converted }),
     { leads: 0, new: 0, consult_booked: 0, treatment_booked: 0, converted: 0 },
