@@ -247,6 +247,7 @@ class PublicInterestSerializer(serializers.Serializer):
     design_summary = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True)
     international = serializers.BooleanField(required=False, default=False)
     smile_studio_reference = serializers.CharField(max_length=30, required=False, allow_blank=True, allow_null=True)
+    quote_request = serializers.BooleanField(required=False, default=False)  # website 'Request a quote' form
     # Campaign attribution captured by the website cookie (last non-empty touch). All optional.
     attr_utm_source = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
     attr_utm_medium = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)

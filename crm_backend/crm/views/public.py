@@ -9,10 +9,10 @@ from datetime import timedelta
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from ..models import LeadSource, Note, Priority, Task
+from ..models import TREATMENT_SLUGS, Treatment, LeadSource, Note, Priority, Task
 from ..permissions import HasIntakeKey
 from ..serializers import PublicInterestSerializer
-from ..tasks import notify_capi_event, notify_new_lead
+from ..tasks import notify_capi_event, notify_meta_lead, notify_new_lead
 from ..throttles import PublicIntakeThrottle
 
 META_FIELDS = ["meta_event_id", "meta_fbp", "meta_fbc", "meta_event_source_url", "meta_client_ip", "meta_client_user_agent"]
@@ -66,6 +66,18 @@ def studio_request(d):
     return fields, "\n".join(lines), bool(when)
 
 
+def quote_request(d):
+    """Lead fields + note text for the website's 'Request a quote' form (empty for every other form)."""
+    if not d.get("quote_request"):
+        return {}, ""
+    slug = d.get("treatment_interest") if d.get("treatment_interest") in TREATMENT_SLUGS else Treatment.OTHER.value
+    label = Treatment(slug).label
+    text = f"Quote request: {label}"
+    if d.get("message"):
+        text += f"\nPatient notes: {d['message']}"
+    return {"tags": ["quote-request"], "treatment_interests": [slug], "treatment_interest": label}, text
+
+
 def landing_fields(d):
     """Landing page + first-seen time from the website cookie; a malformed value is dropped, never an error."""
     out = {}
@@ -97,6 +109,7 @@ class InterestView(APIView):
         attribution = attribution_from(d)
         country = d.get("country", "")
         studio_fields, studio_text, wants_slot = studio_request(d)
+        quote_fields, quote_text = quote_request(d)
         lead, created = services.create_lead(
             name=f"{d['firstName']} {d.get('lastName', '')}".strip(),
             email=d.get("email", ""),
@@ -106,9 +119,10 @@ class InterestView(APIView):
             source=infer_source(attribution),
             landing_url=d.get("submissionUrl", ""),
             referrer=d.get("referrer", "")[:1000],
-            chief_complaint=studio_text or d.get("message", ""),
+            chief_complaint=studio_text or quote_text or d.get("message", ""),
             consent_marketing=d.get("consent", False),
             **studio_fields,
+            **quote_fields,
             **attribution,
             **landing_fields(d),
         )
@@ -119,6 +133,18 @@ class InterestView(APIView):
                 title="Confirm Smile Studio consultation request" if wants_slot else "Call Smile Studio lead (design unlocked)",
                 due_at=timezone.now() + timedelta(hours=2 if wants_slot else 24),
             )
+        if quote_text:  # also for repeat patients: a quote request must never be lost
+            Note.objects.create(lead=lead, body=quote_text)
+            Task.objects.create(
+                lead=lead, assigned_to=lead.assigned_to, priority=Priority.HIGH,
+                title=f"Send quote to {lead.name}", due_at=timezone.now() + timedelta(hours=4),
+            )
+            if not created:
+                for k in ("tags", "treatment_interests"):  # keep the existing lead's data, add what's new
+                    merged = sorted({*getattr(lead, k), *quote_fields[k]})
+                    setattr(lead, k, merged)
+                lead.save(update_fields=["tags", "treatment_interests", "updated_at"])
+                notify_meta_lead(lead.id, repeat=True)
         meta = {k: str(d[k]) for k in META_FIELDS if d.get(k)}
         if meta:  # keep the latest browser/IP data so later events (Schedule, TreatmentBooked) still match
             for k, v in meta.items():
