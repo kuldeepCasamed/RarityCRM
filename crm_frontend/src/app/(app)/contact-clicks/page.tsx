@@ -25,7 +25,7 @@ export default function ContactClicksPage() {
     queryFn: async () => (await api.get<{ results: Click[] }>("/analytics/contact-clicks/", { params: { from, to } })).data.results.map(dec),
   });
   const leads = useQuery({
-    queryKey: ["ad-campaigns", days],
+    queryKey: ["contact-clicks-leads", days],
     enabled: isManager,
     queryFn: async () => (await api.get<{ results: CampaignLeads[] }>("/analytics/campaigns/", { params: { from, to } })).data.results.map(dec),
   });
