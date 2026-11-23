@@ -73,15 +73,20 @@ class FetchTests(TestCase):
             setattr(self, p.attribute.replace("_", "") if False else p.attribute, p.start())
 
     def test_creates_lead_with_answers_and_alerts_once(self):
-        self.assertEqual(fetch_meta_lead("L1"), mock.ANY)
+        with mock.patch("crm.tasks.async_task") as q:
+            self.assertEqual(fetch_meta_lead("L1"), mock.ANY)
+            self.assertEqual(fetch_meta_lead("L1"), "already imported")  # redelivery
+        q.assert_called_once()  # exactly one alert task queued
+        self.assertEqual(q.call_args.args[0], "crm.tasks.run_new_lead_alert")
         lead = Lead.objects.get(meta_lead_id="L1")
         self.assertEqual((lead.source, lead.name, lead.email, lead.phone), (LeadSource.META_INSTANT_FORM, "Asha Verma", "asha@x.com", "+918796319927"))
         self.assertEqual((lead.treatment_interest, lead.start_timeframe), ("Invisalign", "within a month"))
         self.assertEqual((lead.meta_campaign_name, lead.meta_adset_name, lead.meta_ad_name, lead.meta_platform), ("Campaign 3", "Set one", "Ad one", "ig"))
-        self.assertTrue(self.safe_push.called)
-        self.assertEqual(fetch_meta_lead("L1"), "already imported")  # redelivery
         self.assertEqual(Lead.objects.filter(meta_lead_id="L1").count(), 1)
+        from crm.tasks import run_new_lead_alert
+        run_new_lead_alert(lead.id, False)  # what the queued task does
         self.assertEqual(self.safe_push.call_count, 1)
+        self.assertTrue(self.send_email.called)
 
     def test_repeat_phone_is_kept_and_flagged(self):
         fetch_meta_lead("L1")

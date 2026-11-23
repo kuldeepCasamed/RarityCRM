@@ -108,7 +108,7 @@ def fetch_meta_lead(leadgen_id, attempt=1):
                    render("Meta lead failed to import", [("Meta lead id", str(leadgen_id)), ("What to do", "The 15-minute backfill will retry it; if it keeps failing, check META_SYSTEM_USER_TOKEN.")]))
         raise
     if created:
-        run_new_lead_alert(lead.id, bool(repeat))
+        async_task("crm.tasks.run_new_lead_alert", lead.id, bool(repeat))  # own task: a slow/failed email must not make this task retry (it would find the lead imported and skip the alert)
         return f"created lead {lead.id}"
     return "already imported"
 

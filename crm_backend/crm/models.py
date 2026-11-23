@@ -151,6 +151,29 @@ class LeadQuerySet(models.QuerySet):
         return self.filter(deleted_at__isnull=True)
 
 
+UTM_FIELDS = ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content")
+
+
+def clean_utm(value):
+    """Decode form/URL encoding ('RD+%7C+2' -> 'RD | 2'); repeats while '%' remains (double-encoded values)."""
+    if not value:
+        return value
+    from urllib.parse import unquote_plus
+    for _ in range(4):
+        decoded = unquote_plus(value)
+        if decoded == value:
+            break
+        value = decoded
+    return value
+
+
+def _clean_utm_fields(obj):
+    for f in UTM_FIELDS:
+        v = getattr(obj, f, None)
+        if v:
+            setattr(obj, f, clean_utm(v))
+
+
 class Lead(models.Model):
     # identity
     name = models.CharField(max_length=200)
@@ -272,6 +295,11 @@ class Lead(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if kwargs.get("update_fields") is None:
+            _clean_utm_fields(self)
+        super().save(*args, **kwargs)
 
     def soft_delete(self):
         self.deleted_at = timezone.now()
@@ -749,6 +777,11 @@ class ContactClick(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        if kwargs.get("update_fields") is None:
+            _clean_utm_fields(self)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.channel} click {self.created_at:%Y-%m-%d %H:%M}"
