@@ -84,6 +84,21 @@ class LeadViewSet(viewsets.ModelViewSet):
         lead.refresh_from_db()
         return Response(LeadDetailSerializer(lead).data)
 
+    @action(detail=True, methods=["get"], url_path="whatsapp")
+    def whatsapp(self, request, pk=None):
+        """The lead's WhatsApp thread (by lead or by phone, so synced history shows too). Read-only."""
+        from django.db.models import Q
+
+        from ..models import WhatsAppMessage
+
+        lead = self.get_object()
+        q = Q(lead=lead) | (Q(phone=lead.phone) if lead.phone else Q())
+        rows = WhatsAppMessage.objects.filter(q).order_by("timestamp")[:500]
+        return Response({
+            "first_response_at": lead.first_response_at, "last_whatsapp_at": lead.last_whatsapp_at,
+            "messages": [{"id": m.id, "direction": m.direction, "type": m.type, "text": m.text, "timestamp": m.timestamp, "is_history": m.is_history} for m in rows],
+        })
+
     @action(detail=True, methods=["get"], url_path="status-history")
     def status_history(self, request, pk=None):
         lead = self.get_object()

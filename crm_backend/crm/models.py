@@ -275,6 +275,13 @@ class Lead(models.Model):
     meta_created_time = models.DateTimeField(null=True, blank=True)
     meta_raw = models.JSONField(null=True, blank=True, help_text="Full Graph API response (debugging; not exposed by the API)")
 
+    # WhatsApp chats (Cloud API coexistence)
+    first_message = models.CharField(max_length=500, blank=True)
+    last_whatsapp_at = models.DateTimeField(null=True, blank=True)
+    first_response_at = models.DateTimeField(null=True, blank=True, help_text="First reply sent from the WhatsApp Business app after the first inbound message")
+    meta_ctwa_clid = models.CharField(max_length=300, blank=True)
+    meta_ad_headline = models.CharField(max_length=255, blank=True)
+
     # consent
     consent_marketing = models.BooleanField(default=False)
     consent_recording = models.BooleanField(default=False)
@@ -785,3 +792,46 @@ class ContactClick(models.Model):
 
     def __str__(self):
         return f"{self.channel} click {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class WhatsAppMessage(models.Model):
+    """One WhatsApp message on the clinic number. Linked to a lead by FK or, for history synced before a lead exists, by phone."""
+
+    class Direction(models.TextChoices):
+        IN = "in", "Inbound"
+        OUT = "out", "Outbound (sent from the phone app)"
+
+    lead = models.ForeignKey(Lead, null=True, blank=True, on_delete=models.SET_NULL, related_name="whatsapp_messages")
+    phone = models.CharField(max_length=20, db_index=True, help_text="Customer number, E.164")
+    wa_message_id = models.CharField(max_length=120, unique=True)
+    direction = models.CharField(max_length=3, choices=Direction.choices)
+    type = models.CharField(max_length=30, default="text")
+    text = models.TextField(null=True, blank=True)
+    timestamp = models.DateTimeField(db_index=True)
+    is_history = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["timestamp"]
+
+    def __str__(self):
+        return f"{self.direction} {self.type} {self.timestamp:%Y-%m-%d %H:%M}"
+
+
+class WhatsAppConnection(models.Model):
+    """Single row: the WABA / number onboarded through Embedded Signup (coexistence)."""
+
+    waba_id = models.CharField(max_length=40)
+    phone_number_id = models.CharField(max_length=40)
+    display_number = models.CharField(max_length=30, blank=True)
+    connected_at = models.DateTimeField(auto_now=True)
+    sync_result = models.JSONField(default=dict, blank=True)
+
+
+class WhatsAppEvent(models.Model):
+    """Webhook delivery log: field name and time only, never content (used by meta_whatsapp_check)."""
+
+    field = models.CharField(max_length=40)
+    received_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-received_at"]

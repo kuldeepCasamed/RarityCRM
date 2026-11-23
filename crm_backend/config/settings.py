@@ -173,6 +173,10 @@ META_LEADS_VERIFY_TOKEN = env("META_LEADS_VERIFY_TOKEN", default="")
 META_SYSTEM_USER_TOKEN = env("META_SYSTEM_USER_TOKEN", default="")
 META_PAGE_ID = env("META_PAGE_ID", default="531701103364168")
 META_LEAD_FORM_IDS = env.list("META_LEAD_FORM_IDS", default=[])
+META_WA_VERIFY_TOKEN = env("META_WA_VERIFY_TOKEN", default="")  # WhatsApp webhook handshake (separate from the leadgen one)
+META_WA_ES_CONFIG_ID = env("META_WA_ES_CONFIG_ID", default="")  # Embedded Signup (Facebook Login for Business) configuration
+META_WABA_ID = env("META_WABA_ID", default="")  # fallbacks: the onboarding page stores these in WhatsAppConnection
+META_WA_PHONE_NUMBER_ID = env("META_WA_PHONE_NUMBER_ID", default="")
 
 # --- CRM settings ---
 CRM_BASE_URL = env("CRM_BASE_URL", default="http://localhost:3000")

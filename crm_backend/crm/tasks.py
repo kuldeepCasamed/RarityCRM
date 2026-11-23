@@ -292,3 +292,14 @@ def run_campaign_tick():
     from .campaigns import run_campaign_tick as tick
 
     return f"campaigns: {tick()}"
+
+
+def process_whatsapp_change(field, value):
+    """One WhatsApp webhook change (field + value). New ad/organic chats alert the front desk, each in its own task."""
+    from . import whatsapp
+
+    result = whatsapp.handle_change(field, value)
+    if field == "messages":
+        for lead_id in result or []:
+            async_task("crm.tasks.run_new_lead_alert", lead_id, False)
+    return f"{field}: ok"

@@ -10,7 +10,7 @@ import CallPanel from "@/components/CallPanel";
 import LeadProfileForm from "@/components/LeadProfileForm";
 import { api, decodeUtm, dualTime, errMsg, isQueued, Lead, leadTimezone, sourceLabel, STATUSES } from "@/lib/api";
 
-const TABS = ["Overview", "Profile", "Contacts", "Notes", "Tasks", "Appointments", "Emails", "Quotes", "Calls", "History"] as const;
+const TABS = ["Overview", "Profile", "Contacts", "Notes", "Tasks", "Appointments", "Emails", "Quotes", "WhatsApp", "Calls", "History"] as const;
 
 export default function LeadDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -64,6 +64,7 @@ export default function LeadDetail({ params }: { params: Promise<{ id: string }>
       {tab === "Appointments" && <Appointments id={id} />}
       {tab === "Emails" && <EmailsTab leadId={lead.id} leadName={lead.name} />}
       {tab === "Quotes" && <QuotesTab leadId={lead.id} leadEmail={lead.email} leadName={lead.name} />}
+      {tab === "WhatsApp" && <WhatsAppThread id={id} />}
       {tab === "Calls" && <LeadCalls id={id} />}
       {tab === "History" && <History id={id} />}
     </div>
@@ -222,6 +223,28 @@ function Appointments({ id }: { id: string }) {
       </form>
       {data?.map((a) => (
         <div key={a.id} className="bg-white border rounded-lg p-3 text-sm">{format(new Date(a.start_at), "EEE d MMM, HH:mm")} · {a.kind} · <b>{a.status}</b></div>
+      ))}
+    </div>
+  );
+}
+
+function WhatsAppThread({ id }: { id: string }) {
+  const { data } = useQuery({
+    queryKey: ["whatsapp-thread", id],
+    queryFn: async () => (await api.get<{ first_response_at: string | null; messages: { id: number; direction: "in" | "out"; type: string; text: string | null; timestamp: string; is_history: boolean }[] }>(`/leads/${id}/whatsapp/`)).data,
+  });
+  if (!data) return <p className="text-stone-500 text-sm">Loading…</p>;
+  if (!data.messages.length) return <p className="text-stone-500 text-sm">No WhatsApp messages yet. Chats on the clinic number appear here automatically; reply from the WhatsApp Business app on the phone.</p>;
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-stone-500">Read-only. Reply from the WhatsApp Business app.{data.first_response_at && ` First reply: ${format(new Date(data.first_response_at), "d MMM HH:mm")}.`}</p>
+      {data.messages.map((m) => (
+        <div key={m.id} className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
+          <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${m.direction === "out" ? "bg-emerald-100" : "bg-white border"}`}>
+            {m.text ?? <i className="text-stone-400">[{m.type}]</i>}
+            <div className="text-[10px] text-stone-400 mt-1">{format(new Date(m.timestamp), "d MMM HH:mm")}{m.is_history && " · history"}</div>
+          </div>
+        </div>
       ))}
     </div>
   );

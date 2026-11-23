@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect WhatsApp</title>
+<style>
+  body{font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;color:#1a1a1a}
+  button{font:inherit;padding:12px 20px;border:0;border-radius:8px;background:#1877f2;color:#fff;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  pre{background:#f4f4f5;padding:12px;border-radius:8px;overflow:auto}
+  .note{background:#fff8e1;border:1px solid #f0d37a;padding:12px;border-radius:8px}
+</style>
+</head>
+<body>
+<h1>Connect WhatsApp (coexistence)</h1>
+<p>Connects the clinic's existing WhatsApp Business app number to the CRM. The app keeps working on the phone as today. The CRM only receives messages; it never sends.</p>
+<div class="note">Keep the clinic phone nearby. Meta will ask you to enter the number and scan a QR code in the WhatsApp Business app. If Meta says the number or app is not eligible for coexistence, stop and send us the exact message.</div>
+
+{% if connection %}
+<h2>Connected</h2>
+<ul>
+  <li>Number: {{ connection.display_number|default:"(unknown)" }}</li>
+  <li>WABA ID: {{ connection.waba_id }}</li>
+  <li>Phone number ID: {{ connection.phone_number_id }}</li>
+</ul>
+{% endif %}
+
+{% if not config_id %}
+<p><strong>META_WA_ES_CONFIG_ID is not set yet.</strong> The Connect button is disabled until it is.</p>
+{% endif %}
+<p><button id="go" {% if not config_id %}disabled{% endif %}>Connect WhatsApp</button></p>
+<pre id="out">Not started.</pre>
+
+<script>
+const out = document.getElementById('out');
+const show = (x) => { out.textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 2); };
+let session = null, code = null;
+
+function csrf() { return (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''; }
+
+async function finish() {
+  if (!(session && code)) return;
+  show('Finishing setup with Meta...');
+  const res = await fetch('/admin/meta/whatsapp-connect/complete/', {
+    method: 'POST', credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+    body: JSON.stringify({code: code, waba_id: session.waba_id, phone_number_id: session.phone_number_id}),
+  });
+  show(await res.json());
+}
+
+window.addEventListener('message', (event) => {
+  if (!/^https:\/\/(www|web)\.facebook\.com$/.test(event.origin)) return;
+  let data = event.data;
+  try { if (typeof data === 'string') data = JSON.parse(data); } catch (e) { return; }
+  if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') return;
+  if (data.event && data.event.startsWith('FINISH')) { session = data.data; finish(); }
+  else if (data.event === 'CANCEL') { show('Cancelled: ' + JSON.stringify(data.data || {})); }
+  else if (data.event === 'ERROR') { show('Meta reported an error: ' + JSON.stringify(data.data || {})); }
+});
+
+window.fbAsyncInit = function () {
+  FB.init({appId: '{{ app_id }}', autoLogAppEvents: true, xfbml: true, version: '{{ graph_version }}'});
+};
+
+document.getElementById('go').addEventListener('click', () => {
+  show('Waiting for Meta...');
+  FB.login((response) => {
+    if (response.authResponse && response.authResponse.code) { code = response.authResponse.code; finish(); }
+    else show('Login was cancelled or failed.');
+  }, {
+    config_id: '{{ config_id }}', response_type: 'code', override_default_response_type: true,
+    extras: {setup: {}, featureType: 'whatsapp_business_app_onboarding', sessionInfoVersion: '3'},
+  });
+});
+</script>
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+</body>
+</html>
