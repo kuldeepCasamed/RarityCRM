@@ -96,6 +96,19 @@ class ProcessTests(TestCase):
         self.run_change("messages", inbound())
         self.assertEqual((Lead.objects.count(), WhatsAppMessage.objects.count()), (1, 1))
 
+    def test_user_id_in_from_falls_back_to_contact_wa_id(self):
+        v = inbound()
+        v["messages"][0]["from"] = "US.13491208655302741918"
+        self.run_change("messages", v)
+        self.assertEqual(Lead.objects.get().phone, "+919876543210")
+
+    def test_no_usable_phone_skipped(self):
+        v = inbound()
+        v["messages"][0]["from"] = "US.1349"
+        v["contacts"] = [{"wa_id": "US.1349", "profile": {"name": "X"}}]
+        self.run_change("messages", v)
+        self.assertEqual((Lead.objects.count(), WhatsAppMessage.objects.count()), (0, 0))
+
     def test_other_number_ignored(self):
         self.run_change("messages", inbound(pnid="HAPTIK"))
         self.assertEqual(Lead.objects.count(), 0)

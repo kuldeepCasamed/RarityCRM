@@ -51,7 +51,9 @@ def _text(msg: dict) -> str | None:
 
 
 def _phone(wa_id: str) -> str:
-    return services.normalize_phone("+" + str(wa_id).lstrip("+")) if wa_id else ""
+    """Digits only: newer API versions may send an opaque user id instead of a number, which we can't use as a phone."""
+    digits = str(wa_id or "").lstrip("+")
+    return services.normalize_phone("+" + digits) if digits.isdigit() else ""
 
 
 def _store(*, phone, msg, direction, lead=None, is_history=False) -> tuple[WhatsAppMessage | None, bool]:
@@ -100,7 +102,14 @@ def process_inbound(value: dict) -> list[int]:
     for msg in value.get("messages", []):  # `statuses` are ignored on purpose
         wa_id = msg.get("from") or ""
         phone = _phone(wa_id)
+        if not phone:  # v24+ payloads: the number can be in contacts[].wa_id while `from` is a user id
+            for c in value.get("contacts", []):
+                if _phone(c.get("wa_id")):
+                    wa_id, phone = c["wa_id"], _phone(c["wa_id"])
+                    break
         if not phone or not msg.get("id"):
+            if msg.get("id"):
+                log.warning("whatsapp message %s skipped: no usable phone number in payload", msg["id"])
             continue
         if WhatsAppMessage.objects.filter(wa_message_id=str(msg["id"])).exists():
             continue  # duplicate delivery
@@ -149,7 +158,7 @@ def process_echo(value: dict) -> int:
         return 0
     n = 0
     for msg in value.get("message_echoes", []):
-        phone = _phone(msg.get("to"))
+        phone = _phone(msg.get("to") or msg.get("recipient_id"))
         if not phone or not msg.get("id"):
             continue
         lead = any_lead_for(phone)
